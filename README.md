@@ -90,11 +90,6 @@ projeto-stop/
 │   ├── index.html
 │   ├── vite.config.js
 │   └── package.json
-│
-└── sql/
-    ├── schema.sql                 # Estrutura completa das tabelas.
-    ├── seed_temas.sql             # Povoa temas e letras (A-Z).
-    └── seed_respostas.sql         # Dicionário de palavras válidas por tema/letra.
 ```
 
 ---
