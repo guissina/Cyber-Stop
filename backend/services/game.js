@@ -15,7 +15,9 @@ function normalize(txt = '') {
 /* =========================
    Helpers de banco
 ========================= */
-async function getJogadoresDaSala(salaId) {
+
+// CORRIGIDO: Adicionado 'export' para que possa ser importada
+export async function getJogadoresDaSala(salaId) {
   const sId = Number(salaId)
 
   // A) fonte canônica
@@ -27,19 +29,11 @@ async function getJogadoresDaSala(salaId) {
   if (js.error) throw js.error
   let ids = (js.data || []).map(r => Number(r.jogador_id)).filter(Boolean)
 
-  // B) fallback: participante_sala (se existir)
-  if (ids.length < 2) {
-    const ps = await supa
-      .from('participante_sala')
-      .select('jogador_id')
-      .eq('sala_id', sId)
-      .order('jogador_id', { ascending: true })
-    if (ps.error && ps.error.code !== 'PGRST116') throw ps.error
-    const more = (ps.data || []).map(r => Number(r.jogador_id)).filter(Boolean)
-    ids = [...new Set([...ids, ...more])]
-  }
+  // B) fallback: participante_sala (REMOVIDO)
+
   return ids.sort((a,b) => a - b)
 }
+
 
 /** Core da rodada: sala + letra */
 async function getRoundCore(rodadaId) {
@@ -210,7 +204,9 @@ async function computeTotaisSala({ salaId }) {
  * Retorna um mapa: { [tema_id]: Set<string_normalizada> }
  */
 async function loadLexiconMap({ temaIds, letraId }) {
-  if (!temaIds.length) return {}
+  if (!temaIds || !temaIds.length) return {} // Adiciona verificação
+  if (!letraId) return {}; // Adiciona verificação
+
   const { data, error } = await supa
     .from('resposta_base')
     .select('tema_id, texto')
@@ -232,119 +228,160 @@ async function loadLexiconMap({ temaIds, letraId }) {
 ========================= */
 /**
  * HARDENING: encerra rodada com lock e pontua com base no dicionário
+ * ATUALIZADO: Lógica de pontuação refeita para N jogadores
  */
 export async function endRoundAndScore({ salaId, roundId }) {
-  // 🔒 tenta ganhar o "lock"
+  // 🔒 Tenta ganhar o "lock" para evitar pontuação dupla
   const lock = await supa
     .from('rodada')
     .update({ status: 'scoring' })
     .eq('rodada_id', roundId)
-    .in('status', ['ready', 'in_progress'])
+    .in('status', ['ready', 'in_progress']) // Só pode pontuar se estava pronta ou em progresso
     .select('rodada_id')
     .maybeSingle()
   if (lock.error) throw lock.error
   if (!lock.data) {
-    // outro processo já está/esteve pontuando
+    // Outro processo (ou o mesmo, em caso de erro anterior) já está pontuando ou já pontuou.
+    console.warn(`[endRoundAndScore] Lock não adquirido ou rodada ${roundId} já em scoring/done.`);
+    // Retorna os totais atuais para consistência, mas sem calcular placar da rodada novamente.
     return { roundId, roundScore: {}, totais: await computeTotaisSala({ salaId }) }
   }
 
-  // ==== fluxo normal de pontuação ====
-  let jogadores = await getJogadoresDaSala(salaId)
-  if (jogadores.length < 2) {
+  // ==== Fluxo normal de pontuação ====
+  let jogadores = await getJogadoresDaSala(salaId) // Pega jogadores da tabela jogador_sala
+  // Fallback: Se jogador_sala estiver vazio (ex: jogadores saíram?), pega quem participou
+  if (!jogadores || jogadores.length === 0) {
+    console.warn(`[endRoundAndScore] Nenhum jogador encontrado em jogador_sala para sala ${salaId}. Verificando participacao_rodada.`);
     const q = await supa
       .from('participacao_rodada')
-      .select('jogador_id')
+      .select('jogador_id', { distinct: true }) // Pega IDs únicos
       .eq('rodada_id', roundId)
     if (q.error) throw q.error
-    const distinct = [...new Set((q.data || []).map(r => Number(r.jogador_id)).filter(Boolean))]
-    jogadores = [...new Set([...jogadores, ...distinct])].sort((a,b)=>a-b)
-  }
-
-  const temas = await getTemasDaRodada(roundId) // [{tema_id, tema_nome}]
-  await ensurePlaceholders({ rodadaId: roundId, jogadores, temas })
-
-  const respostas = await loadRespostasRodada({ rodadaId: roundId, jogadores, temas })
-
-  // pega letra da rodada uma única vez
-  const core = await getRoundCore(roundId)
-  const letraId = core?.letra_id
-  const letraChar = core?.letra?.toUpperCase() || ''
-
-  // carrega dicionário uma única vez (por letra e temas da rodada)
-  const temaIds = temas.map(t => t.tema_id)
-  const lexicon = await loadLexiconMap({ temaIds, letraId })
-
-  const roundScore = {}
-  const aId = jogadores[0]
-  const bId = jogadores[1]
-
-  for (const t of temas) {
-    const temaId = t.tema_id
-    const temaNome = t.tema_nome
-
-    const aTxt = respostas[temaNome]?.[aId]?.resposta || ''
-    const bTxt = bId ? (respostas[temaNome]?.[bId]?.resposta || '') : ''
-
-    const aNorm = normalize(aTxt)
-    const bNorm = normalize(bTxt)
-
-    // valida: começa com a letra e existe no dicionário (tema/letra)
-    const set = lexicon[temaId] || new Set()
-    const startsWithA = aNorm.startsWith(normalize(letraChar))
-    const startsWithB = bNorm.startsWith(normalize(letraChar))
-    const aValida = !!aNorm && startsWithA && set.has(aNorm)
-    const bValida = !!bNorm && startsWithB && set.has(bNorm)
-
-    // regra clássica: 10/5/0
-    let pA = 0, pB = 0
-    if (aValida && bValida && aNorm === bNorm) {
-      pA = pB = 5
-    } else if (aValida && bValida) {
-      pA = pB = 10
-    } else if (aValida) {
-      pA = 10; pB = 0
-    } else if (bValida) {
-      pA = 0; pB = 10
-    } // senão ambos 0
-
-    await savePontuacao({ rodadaId: roundId, temaNome, jogadorId: aId, pontos: pA })
-    if (bId) {
-      await savePontuacao({ rodadaId: roundId, temaNome, jogadorId: bId, pontos: pB })
-      roundScore[temaNome] = { [aId]: pA, [bId]: pB }
-    } else {
-      roundScore[temaNome] = { [aId]: pA }
+    jogadores = (q.data || []).map(r => Number(r.jogador_id)).filter(Boolean).sort((a,b)=>a-b);
+    if (jogadores.length === 0) {
+        console.warn(`[endRoundAndScore] Nenhum jogador participou da rodada ${roundId}. Abortando pontuação.`);
+        // Marca como done mesmo assim para não bloquear
+        await supa.from('rodada').update({ status: 'done' }).eq('rodada_id', roundId);
+        return { roundId, roundScore: {}, totais: {} }; // Retorna vazio
     }
   }
 
+  const temas = await getTemasDaRodada(roundId) // [{rodada_id, tema_id, tema_nome}]
+  if (!temas || temas.length === 0) {
+      console.warn(`[endRoundAndScore] Rodada ${roundId} não tem temas associados. Abortando pontuação.`);
+      await supa.from('rodada').update({ status: 'done' }).eq('rodada_id', roundId);
+      return { roundId, roundScore: {}, totais: await computeTotaisSala({ salaId }) };
+  }
+  
+  // Garante que existe uma linha em participacao_rodada para cada jogador/tema
+  await ensurePlaceholders({ rodadaId: roundId, jogadores, temas })
+
+  // Carrega todas as respostas (incluindo as placeholders vazias)
+  const respostas = await loadRespostasRodada({ rodadaId: roundId, jogadores, temas })
+
+  // Pega a letra da rodada (necessário para validação e para carregar o dicionário)
+  const core = await getRoundCore(roundId)
+  if (!core) { // Segurança extra
+      console.error(`[endRoundAndScore] Falha ao carregar core da rodada ${roundId}.`);
+      // Não reverter o status 'scoring' aqui, marcar como done
+      await supa.from('rodada').update({ status: 'done' }).eq('rodada_id', roundId);
+      return { roundId, roundScore: {}, totais: await computeTotaisSala({ salaId }) };
+  }
+  const letraId = core.letra_id
+  const letraChar = core.letra?.toUpperCase() || ''
+  const letraNorm = normalize(letraChar); // Normaliza a letra da rodada uma vez
+
+  // Carrega o dicionário de respostas válidas para esta letra e temas
+  const temaIds = temas.map(t => t.tema_id)
+  const lexicon = await loadLexiconMap({ temaIds, letraId })
+
+  const roundScore = {} // Objeto para guardar o placar desta rodada { tema_nome: { jogador_id: pontos } }
+  const allJogadorIds = [...jogadores] // Lista de IDs de todos os jogadores na sala/participantes
+
+  // Itera sobre cada tema da rodada
+  for (const t of temas) {
+    const temaId = t.tema_id
+    const temaNome = t.tema_nome
+    const set = lexicon[temaId] || new Set() // Dicionário para este tema/letra
+
+    const temaRespostas = {} // { jogador_id: { resposta, norm, valida, pontos } }
+    const validos = {} // { resposta_normalizada: [jogador_id1, jogador_id2] } -> Agrupa quem deu a mesma resposta válida
+
+    // 1. Coleta e valida as respostas de TODOS os jogadores para este tema
+    for (const jId of allJogadorIds) {
+      const resposta = respostas[temaNome]?.[jId]?.resposta || '' // Pega a resposta do mapa carregado
+      const norm = normalize(resposta) // Normaliza a resposta
+      const startsWith = letraNorm ? norm.startsWith(letraNorm) : false // Verifica se começa com a letra (normalizada)
+      const valida = !!norm && startsWith && set.has(norm) // É válida se não for vazia, começar certo e existir no dicionário
+
+      // Armazena informações processadas
+      temaRespostas[jId] = { resposta, norm, valida, pontos: 0 }
+
+      // Se a resposta for válida, adiciona ao grupo 'validos'
+      if (valida) {
+        if (!validos[norm]) validos[norm] = []
+        validos[norm].push(jId)
+      }
+    }
+
+    // 2. Calcula os pontos com base nas respostas válidas agrupadas
+    for (const norm in validos) {
+      const jogadoresComEstaResposta = validos[norm]
+      if (jogadoresComEstaResposta.length === 1) {
+        // Se SÓ UM jogador deu esta resposta válida -> 10 pontos
+        const jId = jogadoresComEstaResposta[0]
+        temaRespostas[jId].pontos = 10
+      } else {
+        // Se MAIS DE UM jogador deu esta resposta válida -> 5 pontos para cada um
+        for (const jId of jogadoresComEstaResposta) {
+          temaRespostas[jId].pontos = 5
+        }
+      }
+    }
+
+    // 3. Salva a pontuação no banco de dados e constrói o payload 'roundScore' para o frontend
+    roundScore[temaNome] = {}
+    for (const jId of allJogadorIds) {
+      const p = temaRespostas[jId].pontos
+      // Salva a pontuação (0, 5 ou 10) na tabela 'participacao_rodada'
+      await savePontuacao({ rodadaId: roundId, temaNome, jogadorId: jId, pontos: p })
+      // Adiciona ao objeto que será enviado para o frontend
+      roundScore[temaNome][jId] = p
+    }
+  }
+
+  // Calcula os totais acumulados para todos os jogadores na sala
   const totais = await computeTotaisSala({ salaId })
 
-  // ✅ marca rodada como concluída
+  // ✅ Marca a rodada como concluída no banco de dados
   await supa.from('rodada').update({ status: 'done' }).eq('rodada_id', roundId)
 
+  // Retorna o resultado da rodada e os totais
   return { roundId, roundScore, totais }
 }
+
 
 /* =========================
    Sorteio coerente (letra com >=4 temas)
 ========================= */
 export async function generateCoherentRounds({ totalRounds = 5 }) {
-  // 1) Carrega toda a resposta_base (paginando)
+  // 1) Carrega toda a resposta_base (paginando para evitar limites)
   let allRows = []
   let from = 0
-  const pageSize = 1000
+  const pageSize = 1000 // Limite padrão do Supabase
   while (true) {
     const { data, error } = await supa
       .from('resposta_base')
       .select('tema_id, letra_id')
       .range(from, from + pageSize - 1)
     if (error) throw error
-    if (!data?.length) break
+    if (!data?.length) break // Sai se não houver mais dados
     allRows = allRows.concat(data)
-    if (data.length < pageSize) break
-    from += pageSize
+    if (data.length < pageSize) break // Sai se a última página não estava cheia
+    from += pageSize // Prepara para a próxima página
   }
 
-  // 2) Monta mapa letra -> temas
+  // 2) Monta mapa: letra_id -> Set<tema_id>
   const mapa = {}
   for (const r of allRows || []) {
     const lid = Number(r.letra_id)
@@ -353,60 +390,70 @@ export async function generateCoherentRounds({ totalRounds = 5 }) {
     mapa[lid].add(tid)
   }
 
-  // 3) Filtra letras com >=4 temas possíveis
+  // 3) Filtra letras que têm pelo menos 4 temas associados com respostas
   const letrasValidas = Object.entries(mapa)
-    .filter(([_, temas]) => temas.size >= 4)
-    .map(([lid]) => Number(lid))
+    .filter(([_, temasSet]) => temasSet.size >= 4)
+    .map(([lid]) => Number(lid)) // Pega apenas os IDs das letras
 
+  // Verifica se há letras suficientes para o número de rodadas desejado
   if (letrasValidas.length < totalRounds) {
+    console.error(`[generateCoherentRounds] Banco insuficiente: Encontradas ${letrasValidas.length} letras com >=4 temas, mas são necessárias ${totalRounds}.`);
+    // Poderia retornar um erro ou tentar gerar com menos rodadas?
+    // Por enquanto, lança um erro para indicar o problema.
     throw new Error('Banco insuficiente: faltam letras com >=4 temas para gerar as rodadas.')
   }
 
-  // 4) Embaralha e CAPA pelo totalRounds (letras sem repetição)
+  // 4) Embaralha as letras válidas e seleciona o número necessário (sem repetição)
   const pool = [...letrasValidas]
-  for (let i = pool.length - 1; i > 0; i--) {
+  for (let i = pool.length - 1; i > 0; i--) { // Algoritmo Fisher-Yates shuffle
     const j = Math.floor(Math.random() * (i + 1))
     ;[pool[i], pool[j]] = [pool[j], pool[i]]
   }
-  const letrasEscolhidas = pool.slice(0, totalRounds)
+  const letrasEscolhidas = pool.slice(0, totalRounds) // Pega as primeiras 'totalRounds' letras embaralhadas
 
-  // 5) tabelas auxiliares (nomes)
+  // 5) Busca nomes das letras e temas para usar no payload final
   const { data: letrasTbl, error: eL } = await supa
     .from('letra')
     .select('letra_id, letra_caractere')
+    .in('letra_id', letrasEscolhidas) // Otimiza buscando só as letras escolhidas
   if (eL) throw eL
 
   const { data: temasTbl, error: eT } = await supa
     .from('tema')
     .select('tema_id, tema_nome')
+    // Busca todos os temas, pois precisaremos deles para mapear os IDs sorteados
   if (eT) throw eT
+  // Cria um mapa ID -> Nome para busca rápida
+  const temaIdToName = temasTbl.reduce((acc, t) => { acc[t.tema_id] = t.tema_nome; return acc; }, {});
 
-  // 6) monta rounds (para cada letra escolhida, 4 temas válidos)
+  // 6) Monta a estrutura final das rodadas
   const rounds = []
   for (const letra_id of letrasEscolhidas) {
-    const possiveis = [...(mapa[letra_id] || [])]
-    // embaralha e pega 4
-    for (let i = possiveis.length - 1; i > 0; i--) {
+    const temasPossiveisParaLetra = [...(mapa[letra_id] || [])] // Pega os temas válidos para esta letra
+    // Embaralha os temas possíveis para esta letra
+    for (let i = temasPossiveisParaLetra.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1))
-      ;[possiveis[i], possiveis[j]] = [possiveis[j], possiveis[i]]
+      ;[temasPossiveisParaLetra[i], temasPossiveisParaLetra[j]] = [temasPossiveisParaLetra[j], temasPossiveisParaLetra[i]]
     }
-    const escolhidos = possiveis.slice(0, 4)
+    // Seleciona os 4 primeiros temas embaralhados
+    const temasEscolhidosIds = temasPossiveisParaLetra.slice(0, 4)
 
+    // Monta o objeto da rodada com IDs e nomes
     rounds.push({
       letra_id,
-      letra_char: letrasTbl.find(l => l.letra_id === letra_id)?.letra_caractere || '?',
-      temas: escolhidos.map(tid => ({
+      letra_char: letrasTbl.find(l => l.letra_id === letra_id)?.letra_caractere || '?', // Busca o caractere da letra
+      temas: temasEscolhidosIds.map(tid => ({
         tema_id: tid,
-        tema_nome: temasTbl.find(t => t.tema_id === tid)?.tema_nome || ''
+        tema_nome: temaIdToName[tid] || `Tema ${tid}?` // Busca o nome do tema no mapa
       }))
     })
   }
 
-  return rounds
+  return rounds // Retorna a lista de rodadas prontas para serem inseridas no banco
 }
 
 /* =========================
-   LETRAS sem repetição (fallback antigo)
+   LETRAS sem repetição (fallback antigo - manter caso precise?)
 ========================= */
 export function pickLettersNoRepeat({ total, blacklist = [] }) {
   const A = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').filter(ch => !blacklist.includes(ch))

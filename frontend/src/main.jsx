@@ -1,3 +1,4 @@
+// frontend/src/main.jsx
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom'
@@ -5,6 +6,8 @@ import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom'
 import App from './App'
 import LobbyScreen from './pages/LobbyScreen'
 import GameScreen from './pages/GameScreen'
+import ShopScreen from './pages/ShopScreen'
+import WaitingRoomScreen from './pages/WaitingRoomScreen' // <--- IMPORTAR TELA DE ESPERA
 import Login from './pages/Login'
 import './index.css'
 
@@ -21,7 +24,9 @@ const router = createBrowserRouter([
     element: <RequireAuth><App /></RequireAuth>,
     children: [
       { path: '/', element: <LobbyScreen /> },
+      { path: '/waiting/:salaId', element: <WaitingRoomScreen /> }, // <--- ADICIONAR ROTA DE ESPERA
       { path: '/game/:salaId', element: <GameScreen /> },
+      { path: '/shop', element: <ShopScreen /> },
     ],
   },
 ])
