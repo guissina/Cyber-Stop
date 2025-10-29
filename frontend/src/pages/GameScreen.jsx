@@ -89,6 +89,8 @@ export default function GameScreen() { //
   const [activeSkipPowerUpId, setActiveSkipPowerUpId] = useState(null); // ID do power-up de skip ativado
   const [revealPending, setRevealPending] = useState(false); // Indica se revelação de resposta foi ativada
   const [revealedAnswer, setRevealedAnswer] = useState(null); // Guarda a resposta revelada { temaNome, resposta, oponenteId }
+  const [typingBlocked, setTypingBlocked] = useState(false); // Controla se a digitação está bloqueada
+  const [typingBlockTimer, setTypingBlockTimer] = useState(null); // Timer para desbloqueio automático
 
   // Ref para timers de debounce (auto-save)
   const debounceTimers = useRef(new Map()); //
@@ -136,6 +138,8 @@ export default function GameScreen() { //
       setRevealedAnswer(null); // Limpa resposta revelada anteriormente
       setShowJumpscare(false); // Garante que jumpscare não está ativo
       setPlacarRodada({}); // Limpa placar da rodada anterior
+      setTypingBlocked(false); // Reseta bloqueio de digitação
+      if (typingBlockTimer) { clearTimeout(typingBlockTimer); setTypingBlockTimer(null); } // Limpa timer de bloqueio
       setFinalizado(false); // Reseta estado de finalizado
       setVencedor(null); // Limpa vencedor anterior
       // Limpa timers de debounce pendentes
@@ -212,6 +216,40 @@ export default function GameScreen() { //
         setRevealPending(false); // Marca que a revelação ocorreu
     };
 
+    // Efeito que bloqueia a digitação por um período
+    const onBlockTyping = ({ duration, attackerId }) => { //
+        console.log(`effect:block_typing recebido: Bloqueio por ${duration}s do jogador ${attackerId}`); //
+        // Limpa timer anterior se houver
+        if (typingBlockTimer) {
+            clearTimeout(typingBlockTimer);
+        }
+        
+        setTypingBlocked(true); // Bloqueia a digitação
+        
+        // Cria timer para desbloquear após a duração
+        const timer = setTimeout(() => {
+            setTypingBlocked(false);
+            setTypingBlockTimer(null);
+            console.log(`Bloqueio de digitação removido após ${duration}s`);
+        }, duration * 1000);
+        
+        setTypingBlockTimer(timer);
+    };
+
+    // Efeito que apaga os campos já escritos
+    const onClearAnswers = ({ attackerId }) => { //
+        console.log(`effect:clear_answers recebido: Campos apagados pelo jogador ${attackerId}`); //
+        // Limpa todas as respostas do estado local
+        setAnswers({}); //
+        
+        // Cancela todos os auto-saves pendentes
+        for (const t of debounceTimers.current.values()) clearTimeout(t); //
+        debounceTimers.current.clear(); //
+        
+        // Opcional: Mostrar notificação ao usuário
+        alert(`Seus campos foram apagados por um oponente!`);
+    };
+
     // Confirmação de que o backend registrou o uso de um power-up
     const onPowerUpAck = ({ codigo, message }) => { //
         console.log(`powerup:ack recebido: ${codigo} - ${message}`); //
@@ -244,6 +282,8 @@ export default function GameScreen() { //
     socket.on('effect:jumpscare', onJumpscareEffect); //
     socket.on('effect:enable_skip', onEnableSkip); //
     socket.on('effect:answer_revealed', onAnswerRevealed); //
+    socket.on('effect:block_typing', onBlockTyping); //
+    socket.on('effect:clear_answers', onClearAnswers); //
     socket.on('powerup:ack', onPowerUpAck); //
     socket.on('powerup:error', onPowerUpError); //
     socket.on('app:error', onAppError); //
@@ -262,9 +302,16 @@ export default function GameScreen() { //
       socket.off('effect:jumpscare', onJumpscareEffect); //
       socket.off('effect:enable_skip', onEnableSkip); //
       socket.off('effect:answer_revealed', onAnswerRevealed); //
+      socket.off('effect:block_typing', onBlockTyping); //
+      socket.off('effect:clear_answers', onClearAnswers); //
       socket.off('powerup:ack', onPowerUpAck); //
       socket.off('powerup:error', onPowerUpError); //
       socket.off('app:error', onAppError); //
+      
+      // Limpa timer de bloqueio de digitação ao desmontar
+      if (typingBlockTimer) {
+        clearTimeout(typingBlockTimer);
+      }
 
       // Limpar timers de debounce pendentes
       for (const t of debounceTimers.current.values()) clearTimeout(t); //
@@ -317,6 +364,7 @@ export default function GameScreen() { //
   // Atualiza o estado local 'answers' e agenda o auto-save
   const updateAnswer = (temaId, texto) => { //
     if (isLocked) return; // Ignora se bloqueado
+    if (typingBlocked) return; // Ignora se digitação está bloqueada por power-up
     if (skippedCategories.has(temaId)) return; // Ignora se categoria pulada
     setAnswers(prev => ({ ...prev, [temaId]: texto })); //
     autosaveAnswer(temaId, texto); //
@@ -399,6 +447,10 @@ export default function GameScreen() { //
     } else if (powerUp.code === 'REVEAL_OPPONENT_ANSWER') { //
         if (revealPending) { alert("Você já ativou a revelação para esta rodada."); return; } //
          confirmUse = window.confirm(`Usar "${powerUp.nome}"? A resposta será mostrada no final da rodada.`); //
+    } else if (powerUp.code === 'BLOCK_OPPONENT_TYPE_5S') { //
+        confirmUse = window.confirm(`Usar "${powerUp.nome}"? O adversário não poderá digitar por 5 segundos.`); //
+    } else if (powerUp.code === 'CLEAR_OPPONENT_ANSWERS') { //
+        confirmUse = window.confirm(`Usar "${powerUp.nome}"? Os campos já escritos do adversário serão apagados.`); //
     }
 
     if (!confirmUse) return; // Cancela se o usuário não confirmar
@@ -492,6 +544,14 @@ export default function GameScreen() { //
         )}
       </AnimatePresence>
 
+      {/* Notificação de Bloqueio de Digitação */}
+      {typingBlocked && (
+        <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 bg-red-600 text-white px-6 py-3 rounded-lg shadow-lg animate-pulse">
+          <p className="text-lg font-bold">⚠️ Digitação Bloqueada!</p>
+          <p className="text-sm">Você não pode digitar por alguns segundos...</p>
+        </div>
+      )}
+
       {/* Cabeçalho com informações da sala e timer */}
       <header className="flex items-center justify-between bg-gray-800 p-3 rounded-lg shadow sticky top-[72px] z-10"> {/* Ajuste 'top' se a altura da nav principal mudar */}
         <div className="text-sm"> {/* */}
@@ -542,8 +602,8 @@ export default function GameScreen() { //
                       categoryName={t.nome} //
                       value={isSkipped ? '--- PULADO ---' : (answers[t.id] || '')} // Mostra 'PULADO' ou a resposta
                       onChange={e => updateAnswer(t.id, e.target.value)} // Atualiza estado ao digitar
-                      isDisabled={isLocked || timeLeft === 0 || isSkipped} // Desabilita se bloqueado, tempo 0 ou pulado
-                      inputClassName={isSkipped ? 'text-gray-500 italic bg-gray-800' : ''} // Estilo extra se pulado
+                      isDisabled={isLocked || timeLeft === 0 || isSkipped || typingBlocked} // Desabilita se bloqueado, tempo 0, pulado ou bloqueio de digitação
+                      inputClassName={isSkipped ? 'text-gray-500 italic bg-gray-800' : (typingBlocked ? 'bg-red-900/50 text-gray-400' : '')} // Estilo extra se pulado ou bloqueado
                     />
                     {/* Botão de Pular */}
                     {activeSkipPowerUpId && !isSkipped && ( //
