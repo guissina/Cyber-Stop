@@ -155,11 +155,10 @@ export function scheduleRoundCountdown({ salaId, roundId, duration = 20 }) { //
         io.to(salaId).emit('round:stopping', { roundId }); //
         await sleep(GRACE_MS); //
 
-        // Re-verifica se pontuou durante o sleep (ex: por um clique STOP)
-        if (scoredRounds.has(`${salaId}-${roundId}`)) {
-             console.warn(`[TIMER->STOP] Rodada ${roundId} pontuada durante GRACE_MS. Abortando pontuação do timer.`);
-             return;
-        }
+        // --- CORREÇÃO APLICADA ---
+        // O bloco 'if (scoredRounds.has(...))' que estava aqui foi REMOVIDO.
+        // Ele fazia o timer se auto-bloquear.
+        // --- FIM DA CORREÇÃO ---
 
         const payload = await endRoundAndScore({ salaId, roundId }); //
 
