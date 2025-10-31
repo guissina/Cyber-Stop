@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api'; 
 import PixelBlast from '../components/PixelBlast'; // Importa o componente de fundo
+import FaultyTerminalR3F from '../components/FaultyTerminalR3F';
 
 export default function LobbyScreen() {
   const nav = useNavigate(); 

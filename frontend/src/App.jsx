@@ -12,7 +12,7 @@ export default function App() {
 
   return (
     <div className="bg-gray-900 min-h-screen text-white">
-      <nav className="bg-gray-800 p-4 flex justify-between items-center shadow-lg sticky top-0 z-20">
+      <nav className="bg-gray-800 p-4 flex justify-between items-center shadow-lg font-cyber sticky top-0 z-20">
         {/* Links removidos, pode adicionar um link para Home se desejar */}
         <Link to="/" className="hover:text-blue-400 flex items-center gap-1 font-semibold text-lg">
            <Home size={18}/> Stop Online {/* Ou apenas "Home" */}

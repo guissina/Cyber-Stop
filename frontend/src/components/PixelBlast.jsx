@@ -314,7 +314,8 @@ const PixelBlast = ({
   speed = 0.5,
   transparent = true,
   edgeFade = 0.5,
-  noiseAmount = 0
+  noiseAmount = 0,
+  ...rest
 }) => {
   const containerRef = useRef(null);
   const visibilityRef = useRef({ visible: true });
@@ -500,7 +501,7 @@ const PixelBlast = ({
             const effs = p.effects;
             if (effs)
               effs.forEach(eff => {
-                const u = eff.uniforms?.get('uTime');
+                const u = effs.uniforms?.get('uTime');
                 if (u) u.value = uniforms.uTime.value;
               });
           });
@@ -586,12 +587,7 @@ const PixelBlast = ({
   ]);
 
   return (
-    <div
-      ref={containerRef}
-      className={`w-full h-full relative overflow-hidden ${className ?? ''}`}
-      style={style}
-      aria-label="PixelBlast interactive background"
-    />
+    <div ref={containerRef} className={`w-full h-full relative overflow-hidden ${className}`} style={style} {...rest} />
   );
 };
 

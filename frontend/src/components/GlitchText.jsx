@@ -3,12 +3,13 @@ import { Canvas } from '@react-three/fiber'
 import { Text } from '@react-three/drei'
 import { EffectComposer, Glitch } from '@react-three/postprocessing'
 import { GlitchMode } from 'postprocessing'
+import * as THREE from 'three'
 
 export default function GlitchText({ text, fontSize, color, fontWeight, textAlign, font }) {
   return (
     <Canvas style={{ height: '150px' }}>
-      <ambientLight intensity={0.5} />
-      <directionalLight position={[2.5, 5, 5]} intensity={1} />
+      <ambientLight intensity={5} />
+      <directionalLight position={[2.5, 5, 5]} intensity={0.5} />
       <EffectComposer>
         <Glitch
           delay={[0.5, 1.5]}
@@ -28,7 +29,7 @@ export default function GlitchText({ text, fontSize, color, fontWeight, textAlig
           anchorX="center"
           anchorY="middle"
         >
-          <meshStandardMaterial emissive={color} emissiveIntensity={2} />
+          <meshStandardMaterial color={new THREE.Color(color)} emissive={new THREE.Color(color)} emissiveIntensity={10} />
         </Text>
       </EffectComposer>
     </Canvas>
