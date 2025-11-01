@@ -2,7 +2,7 @@
 import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { supa } from '../services/supabase.js'; //
-import { endRoundAndScore, getNextRoundForSala, getJogadoresDaSala } from '../services/game.js'; //
+import { endRoundAndScore, getNextRoundForSala, getJogadoresDaSala, getRoundResults } from '../services/game.js'; //
 
 const JWT_SECRET = process.env.JWT_SECRET || 'developer_secret_key'; //
 
@@ -285,13 +285,23 @@ export function scheduleRoundCountdown({ salaId, roundId, duration = 20 }) { //
 
         const next = await getNextRoundForSala({ salaId, afterRoundId: roundId }); //
         if (next) { //
-            // Código para iniciar a próxima rodada
-             console.log(`[TIMER->NEXT_ROUND] Próxima rodada ${next.rodada_id} para sala ${salaId}`);
-             // Atualiza status da próxima rodada para 'in_progress'
-             await supa.from('rodada').update({ status: 'in_progress' }).eq('rodada_id', next.rodada_id); //
-             io.to(salaId).emit('round:ready', next); //
-             io.to(salaId).emit('round:started', { roundId: next.rodada_id, duration: duration }); // Usar a mesma duração
-             scheduleRoundCountdown({ salaId: salaId, roundId: next.rodada_id, duration: duration }); //
+            // Aguarda 10 segundos antes de iniciar a próxima rodada
+            console.log(`[TIMER->NEXT_ROUND] Aguardando 10 segundos antes de iniciar próxima rodada ${next.rodada_id} para sala ${salaId}`);
+            setTimeout(async () => {
+                // Verifica se ainda existe próxima rodada (pode ter mudado durante o delay)
+                const nextCheck = await getNextRoundForSala({ salaId, afterRoundId: roundId });
+                if (!nextCheck || nextCheck.rodada_id !== next.rodada_id) {
+                    console.log(`[TIMER->NEXT_ROUND] Próxima rodada mudou durante o delay, abortando.`);
+                    return;
+                }
+                // Código para iniciar a próxima rodada
+                console.log(`[TIMER->NEXT_ROUND] Iniciando próxima rodada ${next.rodada_id} para sala ${salaId}`);
+                // Atualiza status da próxima rodada para 'in_progress'
+                await supa.from('rodada').update({ status: 'in_progress' }).eq('rodada_id', next.rodada_id); //
+                io.to(salaId).emit('round:ready', next); //
+                io.to(salaId).emit('round:started', { roundId: next.rodada_id, duration: duration }); // Usar a mesma duração
+                scheduleRoundCountdown({ salaId: salaId, roundId: next.rodada_id, duration: duration }); //
+            }, 10000); // Delay de 10 segundos (10000ms)
         } else { //
           // --- LÓGICA DE FIM DE PARTIDA E MOEDAS (TIMER) ---
           const winnerInfo = computeWinner(payload.totais); //
@@ -379,8 +389,35 @@ export function initSockets(httpServer) { //
         const stoppedBy = by || socket.data.jogador_id; //
 
         if (!salaId || !roundId) { /* Não fazer nada se IDs inválidos */ return; } //
+        
         // Verifica se JÁ FOI PONTUADO antes de fazer qualquer coisa
-        if (alreadyScored(salaId, roundId)) { return; } //
+        if (alreadyScored(salaId, roundId)) {
+            console.warn(`[STOP] Rodada ${roundId} já foi pontuada. Buscando resultados existentes para mostrar placar.`);
+            // Busca os resultados já calculados e os envia
+            const payload = await getRoundResults({ salaId, roundId });
+            io.to(salaId).emit('round:end', payload);
+            
+            // Continua com a lógica de próxima rodada
+            const next = await getNextRoundForSala({ salaId, afterRoundId: roundId });
+            if (next) {
+                console.log(`[STOP->NEXT_ROUND] Aguardando 10 segundos antes de iniciar próxima rodada ${next.rodada_id} para sala ${salaId}`);
+                setTimeout(async () => {
+                    const nextCheck = await getNextRoundForSala({ salaId, afterRoundId: roundId });
+                    if (!nextCheck || nextCheck.rodada_id !== next.rodada_id) {
+                        console.log(`[STOP->NEXT_ROUND] Próxima rodada mudou durante o delay, abortando.`);
+                        return;
+                    }
+                    console.log(`[STOP->NEXT_ROUND] Iniciando próxima rodada ${next.rodada_id} para sala ${salaId}`);
+                    await supa.from('rodada').update({ status: 'in_progress' }).eq('rodada_id', next.rodada_id);
+                    io.to(salaId).emit('round:ready', next);
+                    const qTempo = await supa.from('rodada').select('tempo:tempo_id(valor)').eq('rodada_id', roundId).single();
+                    const duration = qTempo.data?.tempo?.valor || 20;
+                    io.to(salaId).emit('round:started', { roundId: next.rodada_id, duration: duration });
+                    scheduleRoundCountdown({ salaId: salaId, roundId: next.rodada_id, duration: duration });
+                }, 10000);
+            }
+            return; // Retorna aqui para não processar novamente
+        }
 
         console.log(`[CLICK STOP] sala=${salaId} round=${roundId} by=${stoppedBy}`); //
         io.to(salaId).emit('round:stopping', { roundId, by: stoppedBy }); //
@@ -391,8 +428,32 @@ export function initSockets(httpServer) { //
 
         // Re-verifica se pontuou durante o sleep (caso MUITO raro de concorrência extrema)
          if (scoredRounds.has(`${salaId}-${roundId}`)) {
-             console.warn(`[STOP] Rodada ${roundId} pontuada durante GRACE_MS (concorrência?). Abortando pontuação do stop.`);
-             return;
+             console.warn(`[STOP] Rodada ${roundId} já foi pontuada durante GRACE_MS (concorrência?). Buscando resultados existentes.`);
+             // Busca os resultados já calculados e os envia mesmo assim
+             const payload = await getRoundResults({ salaId, roundId });
+             io.to(salaId).emit('round:end', payload);
+             
+             // Continua com a lógica de próxima rodada
+             const next = await getNextRoundForSala({ salaId, afterRoundId: roundId });
+             if (next) {
+                 // Aguarda 10 segundos antes de iniciar a próxima rodada
+                 console.log(`[STOP->NEXT_ROUND] Aguardando 10 segundos antes de iniciar próxima rodada ${next.rodada_id} para sala ${salaId}`);
+                 setTimeout(async () => {
+                     const nextCheck = await getNextRoundForSala({ salaId, afterRoundId: roundId });
+                     if (!nextCheck || nextCheck.rodada_id !== next.rodada_id) {
+                         console.log(`[STOP->NEXT_ROUND] Próxima rodada mudou durante o delay, abortando.`);
+                         return;
+                     }
+                     console.log(`[STOP->NEXT_ROUND] Iniciando próxima rodada ${next.rodada_id} para sala ${salaId}`);
+                     await supa.from('rodada').update({ status: 'in_progress' }).eq('rodada_id', next.rodada_id);
+                     io.to(salaId).emit('round:ready', next);
+                     const qTempo = await supa.from('rodada').select('tempo:tempo_id(valor)').eq('rodada_id', roundId).single();
+                     const duration = qTempo.data?.tempo?.valor || 20;
+                     io.to(salaId).emit('round:started', { roundId: next.rodada_id, duration: duration });
+                     scheduleRoundCountdown({ salaId: salaId, roundId: next.rodada_id, duration: duration });
+                 }, 10000);
+             }
+             return; // Retorna aqui para não processar novamente
          }
 
         const payload = await endRoundAndScore({ 
@@ -453,15 +514,25 @@ export function initSockets(httpServer) { //
 
         const next = await getNextRoundForSala({ salaId, afterRoundId: roundId }); //
         if (next) { //
-            // Código para iniciar a próxima rodada
-            console.log(`[STOP->NEXT_ROUND] Próxima rodada ${next.rodada_id} para sala ${salaId}`);
-            await supa.from('rodada').update({ status: 'in_progress' }).eq('rodada_id', next.rodada_id); //
-            io.to(salaId).emit('round:ready', next); //
-            // Precisa pegar a duração original da rodada anterior ou ter um padrão
-            const qTempo = await supa.from('rodada').select('tempo:tempo_id(valor)').eq('rodada_id', roundId).single(); //
-            const duration = qTempo.data?.tempo?.valor || 20; // Default 20s
-            io.to(salaId).emit('round:started', { roundId: next.rodada_id, duration: duration }); //
-            scheduleRoundCountdown({ salaId: salaId, roundId: next.rodada_id, duration: duration }); //
+            // Aguarda 10 segundos antes de iniciar a próxima rodada
+            console.log(`[STOP->NEXT_ROUND] Aguardando 10 segundos antes de iniciar próxima rodada ${next.rodada_id} para sala ${salaId}`);
+            setTimeout(async () => {
+                // Verifica se ainda existe próxima rodada (pode ter mudado durante o delay)
+                const nextCheck = await getNextRoundForSala({ salaId, afterRoundId: roundId });
+                if (!nextCheck || nextCheck.rodada_id !== next.rodada_id) {
+                    console.log(`[STOP->NEXT_ROUND] Próxima rodada mudou durante o delay, abortando.`);
+                    return;
+                }
+                // Código para iniciar a próxima rodada
+                console.log(`[STOP->NEXT_ROUND] Iniciando próxima rodada ${next.rodada_id} para sala ${salaId}`);
+                await supa.from('rodada').update({ status: 'in_progress' }).eq('rodada_id', next.rodada_id); //
+                io.to(salaId).emit('round:ready', next); //
+                // Precisa pegar a duração original da rodada anterior ou ter um padrão
+                const qTempo = await supa.from('rodada').select('tempo:tempo_id(valor)').eq('rodada_id', roundId).single(); //
+                const duration = qTempo.data?.tempo?.valor || 20; // Default 20s
+                io.to(salaId).emit('round:started', { roundId: next.rodada_id, duration: duration }); //
+                scheduleRoundCountdown({ salaId: salaId, roundId: next.rodada_id, duration: duration }); //
+            }, 10000); // Delay de 10 segundos (10000ms)
         } else { //
           // --- LÓGICA DE FIM DE PARTIDA E MOEDAS (STOP) ---
           const winnerInfo = computeWinner(payload.totais); //
