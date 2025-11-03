@@ -115,12 +115,41 @@ const roomTimers = new Map(); //
 // Função para limpar/cancelar um timer existente para uma sala
 function clearTimerForSala(salaId) {
     salaId = String(salaId); //
-    if (roomTimers.has(salaId)) {
+    if (roomTimers.has(salaId)) { //
         const { interval } = roomTimers.get(salaId); //
         clearInterval(interval); //
         roomTimers.delete(salaId); //
-        console.log(`[TIMER] Timer for sala ${salaId} cleared.`);
+        console.log(`[TIMER] Timer for sala ${salaId} cleared.`); //
     }
+}
+
+// Função para obter o tempo restante de um timer ativo
+// Retorna { timeLeft, roundId } se existe um timer ativo para a sala e rodada, ou null se não existe
+export function getTimerTimeLeft(salaId, roundId) {
+    salaId = String(salaId);
+    roundId = Number(roundId);
+    
+    if (!roomTimers.has(salaId)) {
+        return null;
+    }
+    
+    const timer = roomTimers.get(salaId);
+    
+    // Verifica se o timer é para a mesma rodada
+    if (timer.roundId !== roundId) {
+        return null;
+    }
+    
+    // Calcula o tempo restante
+    const now = Date.now();
+    const timeLeft = Math.max(0, Math.ceil((timer.endsAt - now) / 1000));
+    
+    // Se o tempo já acabou, retorna null (timer não está mais ativo)
+    if (timeLeft <= 0) {
+        return null;
+    }
+    
+    return { timeLeft, roundId: timer.roundId };
 }
 
 // Set para guardar rodadas já pontuadas (evitar pontuação dupla)
