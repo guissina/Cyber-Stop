@@ -69,6 +69,35 @@ router.post('/join', requireAuth, async (req, res) => {
         console.log(`---> [POST /rooms/join] Erro: Criador ${jogador_id} tentou usar /join.`);
         return res.status(400).json({ error: 'Criador não pode usar /join para re-entrar.' });
     }
+    
+    // Verifica se a sala já tem 2 jogadores (máximo permitido)
+    console.log(`---> [POST /rooms/join] Verificando quantidade de jogadores na sala ${sala_id}...`);
+    const { data: jogadoresExistentes, error: countError } = await supa
+        .from('jogador_sala')
+        .select('jogador_id', { count: 'exact' })
+        .eq('sala_id', sala_id);
+    
+    if (countError) {
+        console.error(`---> [POST /rooms/join] Erro ao contar jogadores na sala ${sala_id}:`, countError);
+        throw countError;
+    }
+    
+    const quantidadeJogadores = jogadoresExistentes?.length || 0;
+    const jogadorJaEstaNaSala = jogadoresExistentes?.some(js => js.jogador_id === jogador_id) || false;
+    
+    console.log(`---> [POST /rooms/join] Sala ${sala_id} tem ${quantidadeJogadores} jogador(es). Jogador ${jogador_id} já está na sala: ${jogadorJaEstaNaSala}`);
+    
+    // Se o jogador já está na sala, permite re-entrar
+    if (jogadorJaEstaNaSala) {
+        console.log(`---> [POST /rooms/join] Jogador ${jogador_id} já está na sala ${sala_id}. Permitindo re-entrada.`);
+    } else {
+        // Se a sala já tem 2 jogadores e o jogador não está na sala, bloqueia
+        if (quantidadeJogadores >= 2) {
+            console.log(`---> [POST /rooms/join] Erro: Sala ${sala_id} já está cheia (${quantidadeJogadores}/2 jogadores).`);
+            return res.status(400).json({ error: 'A sala está cheia. Máximo de 2 jogadores permitidos.' });
+        }
+    }
+    
     console.log(`---> [POST /rooms/join] Tentando UPSERT jogador ${jogador_id} na sala ${sala_id}...`);
     const { error: upsertError } = await supa
         .from('jogador_sala')

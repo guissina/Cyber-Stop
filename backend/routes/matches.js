@@ -79,7 +79,10 @@ router.post('/start', async (req, res) => {
     const unique = [...new Set(ids)].filter(Boolean);
 
     if (unique.length < 2) {
-      return res.status(400).json({ error: 'A sala precisa ter pelo menos 2 jogadores para iniciar a partida.' });
+      return res.status(400).json({ error: 'A sala precisa ter exatamente 2 jogadores para iniciar a partida.' });
+    }
+    if (unique.length > 2) {
+      return res.status(400).json({ error: 'A sala tem mais jogadores do que o permitido. Máximo de 2 jogadores.' });
     }
 
     // 3) Tempo configurado para as rodadas

@@ -228,7 +228,7 @@ function WaitingRoomScreen() {
                   data-augmented-ui="tl-clip tr-clip br-clip bl-clip border"
                 >
                     <h2 className="text-xl md:text-2xl font-semibold mb-4 flex items-center gap-2 text-secondary [transform:translateZ(10px)]"> 
-                       <Users size={24} /> Conexões ({sala.jogadores?.length || 0}) 
+                       <Users size={24} /> Conexões ({sala.jogadores?.length || 0}/2) 
                     </h2>
                     <ul className="space-y-2 max-h-60 overflow-y-auto pr-2 [transform:translateZ(10px)]"> 
                         {(sala.jogadores || []).map((nome, index) => ( 
@@ -266,7 +266,10 @@ function WaitingRoomScreen() {
                             </p>
                         )}
                         {sala.is_creator && sala.jogadores?.length < 2 && ( 
-                               <p className="text-sm text-warning/80 mt-2">Mínimo de 2 conexões para iniciar.</p> 
+                               <p className="text-sm text-warning/80 mt-2">Aguardando mais {2 - (sala.jogadores?.length || 0)} jogador(es) para iniciar (máximo 2).</p> 
+                        )}
+                        {sala.jogadores?.length === 2 && sala.status === 'waiting' && (
+                            <p className="text-sm text-accent/80 mt-2">Sala cheia! Pronto para iniciar.</p>
                         )}
                     </div>
                 )}
