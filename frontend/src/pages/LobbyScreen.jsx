@@ -75,7 +75,7 @@ export default function LobbyScreen() {
       <div className="absolute z-10 max-w-md mx-auto space-y-4 text-white p-4 font-cyber [perspective:1000px]">
       
         <h1 className="text-3xl font-bold text-center mb-6 text-warning tracking-wider">
-          NET::LOBBY
+         LOBBY
         </h1>
 
         {/* Seção para Criar Sala com augmented-ui */}
@@ -85,11 +85,11 @@ export default function LobbyScreen() {
         >
           
           <h2 className="text-xl font-semibold mb-3 text-accent [transform:translateZ(10px)]">
-            Iniciar Novo Nó (Sala)
+            Iniciar Novo Sala
           </h2>
           <input
             className="w-full border border-accent/30 bg-bg-input p-3 rounded text-accent placeholder-text-muted/70 focus:outline-none focus:ring-2 focus:ring-accent [transform:translateZ(10px)] cursor-target"
-            placeholder="Nome do Nó (opcional)"
+            placeholder="Nome da Sala (opcional)"
             value={roomName}
             onChange={(e) => setRoomName(e.target.value)} 
           />
@@ -100,7 +100,7 @@ export default function LobbyScreen() {
             disabled={creating} 
             data-augmented-ui="tl-scoop tr-scoop br-scoop bl-scoop"
           >
-            {creating ? 'Estabelecendo...' : 'Criar Nó'}
+            {creating ? 'Estabelecendo...' : 'Criar Sala'}
           </button>
         </div>
 
@@ -112,12 +112,12 @@ export default function LobbyScreen() {
           data-augmented-ui="tl-clip tr-clip br-clip bl-clip border"
         >
           <h2 className="text-xl font-semibold mb-3 text-secondary [transform:translateZ(10px)]">
-            Conectar a Nó Existente
+            Conectar a uma sala
           </h2>
           <div className="flex gap-2 [transform:translateZ(10px)]">
             <input
               className="flex-1 border border-secondary/30 bg-bg-input p-3 rounded text-secondary placeholder-text-muted/70 focus:outline-none focus:ring-2 focus:ring-secondary cursor-target"
-              placeholder="ID do Nó"
+              placeholder="ID do Sala"
               value={roomIdToJoin}
               onChange={(e) => setRoomIdToJoin(e.target.value)} 
               type="number"

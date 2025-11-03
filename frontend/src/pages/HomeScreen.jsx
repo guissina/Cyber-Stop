@@ -25,7 +25,7 @@ export default function HomeScreen() {
           <CyberLogo />
         </div>
 
-        <GlitchText text="STOP:MATRIX" fontSize={3} color="rgb(57, 255, 20)" fontWeight="bold" textAlign="center" font="https://fonts.gstatic.com/s/orbitron/v35/yMJMMIlzdpvBhQQL_SC3X9yhF25-T1ny_Cmxpg.ttf" />
+        <GlitchText text="C://STOP_" fontSize={3} color="rgb(57, 255, 20)" fontWeight="bold" textAlign="center" font="https://fonts.gstatic.com/s/orbitron/v35/yMJMMIlzdpvBhQQL_SC3X9yhF25-T1ny_Cmxpg.ttf" />
 
         <div className="space-y-6 w-full max-w-xs [transform-style:preserve-3d]">
           <button

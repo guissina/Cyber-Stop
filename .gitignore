@@ -7,6 +7,7 @@ yarn-error.log*
 dist/
 .build/
 .cache/
+.SQLs
 
 # Python (se usar venvs/whisper etc.)
 __pycache__/
