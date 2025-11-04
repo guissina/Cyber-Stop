@@ -86,7 +86,7 @@ function ShopScreen() {
   if (loading && shopItems.length === 0) {
     return (
       <div className="text-white text-center p-10 flex items-center justify-center gap-2 font-cyber">
-        <Loader2 className="animate-spin text-secondary" /> Carregando Mercado Negro...
+        <Loader2 className="animate-spin text-secondary" /> Carregando Mercado Paralelo...
       </div>
     );
   }
@@ -131,7 +131,7 @@ function ShopScreen() {
         {/* Seção da Loja de Power-ups */}
         <div className="flex items-center gap-3 md:gap-4 mb-6">
           <Store className="h-7 w-7 md:h-8 md:w-8 text-primary" />
-          <h1 className="text-3xl md:text-4xl font-bold text-text-header">Mercado Negro</h1>
+          <h1 className="text-3xl md:text-4xl font-bold text-text-header">Mercado Paralelo</h1>
         </div>
         
         {loading && <div className="text-center text-text-muted">Atualizando...</div>}
@@ -158,7 +158,7 @@ function ShopScreen() {
             );
           })}
            {!loading && shopItems.length === 0 && (
-              <p className="text-text-muted md:col-span-2 lg:col-span-3 text-center">Nenhum item disponível no mercado negro no momento.</p>
+              <p className="text-text-muted md:col-span-2 lg:col-span-3 text-center">Nenhum item disponível no Mercado Paralelo no momento.</p>
            )}
         </div>
 
