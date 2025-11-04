@@ -10,17 +10,15 @@ const coinPackages = [
   { id: 4, amount: 3000, price: "R$ 99,99" },
 ];
 
-function BuyCoinsModal({ isOpen, onClose, onConfirmPurchase }) {
+function BuyCoinsModal({ isOpen, onClose, onRequestPaymentMethod }) {
   const [selectedPackage, setSelectedPackage] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const handleConfirm = async () => {
+  const handleConfirm = () => {
     if (!selectedPackage) return;
-    setIsProcessing(true);
-    await onConfirmPurchase(selectedPackage.amount); 
-    setIsProcessing(false);
-    setSelectedPackage(null); 
-    onClose(); 
+    onRequestPaymentMethod(selectedPackage.amount, selectedPackage.price);
+    setSelectedPackage(null);
+    onClose();
   };
 
   const handleSelectPackage = (pkg) => {
