@@ -172,6 +172,7 @@ export default function GameScreen() {
           totais={totais}
           vencedor={vencedor}
           meuJogadorId={meuJogadorId}
+          salaId={salaId}
           onReFetchInventory={fetchInventory} // Passa a função para rebuscar moedas
         />
       ) : !rodadaId ? (

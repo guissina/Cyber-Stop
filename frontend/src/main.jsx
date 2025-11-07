@@ -4,13 +4,14 @@ import ReactDOM from 'react-dom/client'
 import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom'
 
 import App from './App'
-import HomeScreen from './pages/Homescreen'
+import HomeScreen from './pages/HomeScreen'
 import LobbyScreen from './pages/LobbyScreen'
 import GameScreen from './pages/GameScreen'
 import ShopScreen from './pages/ShopScreen'
 import WaitingRoomScreen from './pages/WaitingRoomScreen'
 import Login from './pages/Login'
 import ProfileScreen from './pages/ProfileScreen'
+import RankingScreen from './pages/RankingScreen'
 import './index.css'
 
 function RequireAuth({ children }) {
@@ -51,6 +52,14 @@ const router = createBrowserRouter([
       {
         path: 'Profile',
         element:<ProfileScreen/>
+      },
+      {
+        path: 'ranking',
+        element: <RankingScreen />
+      },
+      {
+        path: 'ranking/sala/:salaId',
+        element: <RankingScreen />
       }
     ],
   },
