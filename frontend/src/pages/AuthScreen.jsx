@@ -1,9 +1,8 @@
-// src/pages/AuthScreen.jsx - REFATORADO
+// src/pages/AuthScreen.jsx - REFATORADO PARA USAR O BACKEND NODE.JS
 
 import { useState } from 'react';
-// Importamos nosso novo cliente de API
-import apiClient from '../apiClient'; 
-// A função `useNavigate` pode ser útil para redirecionar após o login
+// Importamos o cliente de API correto (o mesmo da Loja)
+import api from '../lib/api'; 
 import { useNavigate } from 'react-router-dom';
 
 
@@ -11,11 +10,13 @@ function AuthScreen() {
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  
+  // Estado extra para o cadastro
+  const [nomeDeUsuario, setNomeDeUsuario] = useState(''); 
+  
   const [isLogin, setIsLogin] = useState(true);
   const [message, setMessage] = useState('');
   
-  // O useNavigate não é estritamente necessário aqui, pois o App.jsx
-  // vai detectar a mudança, mas é bom tê-lo.
   const navigate = useNavigate();
 
   const handleAuth = async (event) => {
@@ -25,28 +26,34 @@ function AuthScreen() {
 
     try {
       if (isLogin) {
-        // --- LÓGICA DE LOGIN COM A API FLASK ---
-        const response = await apiClient.post('/auth/sign_in', {
+        // --- LÓGICA DE LOGIN COM O BACKEND NODE.JS ---
+        // Rota: /auth/login
+        const response = await api.post('/auth/login', {
           email,
           password,
         });
         
-        // Salva o token recebido do backend no localStorage
-        localStorage.setItem('authToken', response.data.access_token);
+        // Salva o token recebido (o backend node retorna 'token')
+        //
+        localStorage.setItem('token', response.data.token); 
         
-        // Força um recarregamento da página para que o App.jsx detecte o token
-        // e mude o estado para logado.
+        // Força recarregamento ou redireciona
         window.location.reload();
+        // navigate('/home'); // Alternativa
 
       } else {
-        // --- LÓGICA DE CADASTRO COM A API FLASK ---
-        await apiClient.post('/auth/sign_up', {
+        // --- LÓGICA DE CADASTRO COM O BACKEND NODE.JS ---
+        // Rota: /auth/register
+        // Precisa de: email, password, nome_de_usuario
+        await api.post('/auth/register', {
           email,
           password,
+          nome_de_usuario: nomeDeUsuario, // Usando o novo estado
         });
 
         setMessage('Cadastro realizado! Agora você pode fazer o login.');
         setIsLogin(true); // Muda para a tela de login após o cadastro
+        setNomeDeUsuario(''); // Limpa o campo
       }
     } catch (error) {
       // Pega a mensagem de erro da resposta da API
@@ -57,7 +64,6 @@ function AuthScreen() {
     }
   };
 
-  // O JSX (a parte visual) continua exatamente o mesmo
   return (
     <div className="flex flex-col items-center justify-center h-screen bg-gray-900 text-white">
       <div className="w-full max-w-md p-8 space-y-6 bg-gray-800 rounded-lg shadow-lg">
@@ -65,6 +71,19 @@ function AuthScreen() {
           {isLogin ? 'Login' : 'Crie sua Conta'}
         </h1>
         <form onSubmit={handleAuth} className="space-y-6">
+          
+          {/* Campo de Nome de Usuário (só aparece no cadastro) */}
+          {!isLogin && (
+            <input
+              type="text"
+              placeholder="Seu nome de usuário"
+              value={nomeDeUsuario}
+              required
+              onChange={(e) => setNomeDeUsuario(e.target.value)}
+              className="w-full px-4 py-2 text-white bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          )}
+
           <input
             type="email"
             placeholder="Seu email"

@@ -10,7 +10,10 @@ api.interceptors.request.use(
   (config) => {
     // --- LOGS ADICIONADOS ---
     console.log(`[API Interceptor] Interceptando request para: ${config.url}`);
-    const token = localStorage.getItem('token');
+    
+    // CORREÇÃO: Voltamos para 'token'
+    const token = localStorage.getItem('token'); 
+    
     console.log(`[API Interceptor] Token lido do localStorage: ${token ? 'ENCONTRADO' : 'NÃO ENCONTRADO'}`);
     // -------------------------
 
