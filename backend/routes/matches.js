@@ -1,10 +1,60 @@
 // backend/routes/matches.js
 import { Router } from 'express';
 import { supa } from '../services/supabase.js';
-import { getIO, scheduleRoundCountdown, getTimerTimeLeft } from '../src/sockets.js';
+import { getIO, scheduleRoundCountdown, getTimeLeftForSala } from '../src/sockets.js';
 import { buildRoundPayload, generateCoherentRounds } from '../services/game.js';
+import requireAuth from '../middlewares/requireAuth.js';
 
 const router = Router();
+
+// Rota para buscar rodada atual sem reiniciar timer (usado quando alguém recarrega)
+router.get('/current/:salaId', requireAuth, async (req, res) => {
+  try {
+    const sala_id = Number(req.params.salaId);
+    if (!sala_id) throw new Error('sala_id é obrigatório');
+
+    // Busca rodada atual em andamento
+    const qCurrent = await supa
+      .from('rodada')
+      .select('rodada_id, numero_da_rodada, status, tempo:tempo_id(valor)')
+      .eq('sala_id', sala_id)
+      .eq('status', 'in_progress')
+      .order('numero_da_rodada', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (qCurrent.error) throw qCurrent.error;
+
+    if (!qCurrent.data) {
+      // Não há rodada em andamento
+      return res.json({ ok: true, hasActiveRound: false });
+    }
+
+    const io = getIO();
+    if (io) {
+      const payload = await buildRoundPayload(qCurrent.data.rodada_id);
+      const duration = qCurrent.data.tempo?.valor || 20;
+      const timeLeft = getTimeLeftForSala(sala_id, duration);
+      
+      console.log(`[MATCHES/CURRENT] Enviando rodada atual ${qCurrent.data.rodada_id} para sala ${sala_id} (timeLeft: ${timeLeft}s)`);
+      
+      // Emite apenas para o socket que solicitou (não para toda a sala)
+      // Mas como não temos o socket aqui, vamos emitir para a sala mesmo
+      // O importante é que não reinicia o timer
+      io.to(String(sala_id)).emit('round:ready', payload);
+      io.to(String(sala_id)).emit('round:started', { 
+        roundId: payload.rodada_id, 
+        duration: duration, 
+        timeLeft: timeLeft 
+      });
+    }
+
+    return res.json({ ok: true, hasActiveRound: true, roundId: qCurrent.data.rodada_id });
+  } catch (e) {
+    console.error('/matches/current failed', e);
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // helper: garante tempo_id para uma duração
 async function ensureTempoId(durationSeconds) {
@@ -25,7 +75,7 @@ async function ensureTempoId(durationSeconds) {
   return ins.data.tempo_id;
 }
 
-router.post('/start', async (req, res) => {
+router.post('/start', requireAuth, async (req, res) => {
   try {
     const sala_id = Number(req.body.sala_id);
     if (!sala_id) throw new Error('sala_id é obrigatório');
@@ -45,6 +95,34 @@ router.post('/start', async (req, res) => {
 
     if ((qExisting.data || []).length > 0) {
       const first = qExisting.data[0];
+      
+      // Se a rodada já está em andamento, NÃO reinicia o timer, apenas emite os eventos
+      if (first.status === 'in_progress') {
+        const io = getIO();
+        if (io) {
+          const payload = await buildRoundPayload(first.rodada_id);
+          const qTempo = await supa.from('rodada').select('tempo:tempo_id(valor)').eq('rodada_id', first.rodada_id).single();
+          const duration = qTempo.data?.tempo?.valor || DURATION;
+          const timeLeft = getTimeLeftForSala(sala_id, duration);
+          
+          console.log(`[MATCHES/START] Rodada ${first.rodada_id} já está em andamento. Emitindo eventos sem reiniciar timer (timeLeft: ${timeLeft}s)`);
+          
+          // Emite eventos sem reiniciar o timer
+          setTimeout(() => {
+            io.to(String(sala_id)).emit('round:ready', payload);
+            io.to(String(sala_id)).emit('round:started', { roundId: payload.rodada_id, duration: duration, timeLeft: timeLeft });
+          }, 100);
+          
+          setTimeout(() => {
+            const currentTimeLeft = getTimeLeftForSala(sala_id, duration);
+            io.to(String(sala_id)).emit('round:ready', payload);
+            io.to(String(sala_id)).emit('round:started', { roundId: payload.rodada_id, duration: duration, timeLeft: currentTimeLeft });
+          }, 500);
+        }
+        return res.json({ ok: true, reused: true, alreadyInProgress: true });
+      }
+      
+      // Se a rodada está 'ready', inicia normalmente
       const io = getIO();
       if (io) {
         const payload = await buildRoundPayload(first.rodada_id);
@@ -52,11 +130,10 @@ router.post('/start', async (req, res) => {
         // ATUALIZA O STATUS DA SALA ANTES DE INICIAR A RODADA
         const { error: updateSalaError } = await supa
           .from('sala')
-          .update({ status: 'in_progress' }) // Ou o status que indica jogo ativo
+          .update({ status: 'in_progress' })
           .eq('sala_id', sala_id);
         if (updateSalaError) {
             console.error(`Erro ao atualizar status da sala ${sala_id} para in_progress:`, updateSalaError);
-            // Considerar se deve retornar erro ou continuar
         }
 
         // marca como in_progress antes de começar
@@ -65,22 +142,29 @@ router.post('/start', async (req, res) => {
           .update({ status: 'in_progress' })
           .eq('rodada_id', payload.rodada_id);
 
-        // Verifica se já existe um timer ativo para esta sala/rodada
-        const activeTimer = getTimerTimeLeft(sala_id, payload.rodada_id);
+        // Emite eventos múltiplas vezes com delays maiores para garantir que todos os sockets estejam na sala
+        setTimeout(() => {
+          const timeLeft = getTimeLeftForSala(sala_id, DURATION);
+          console.log(`[MATCHES/START] Emitindo round:ready e round:started para sala ${sala_id} (reuso - tentativa 1, timeLeft: ${timeLeft}s)`);
+          io.to(String(sala_id)).emit('round:ready', payload);
+          io.to(String(sala_id)).emit('round:started', { roundId: payload.rodada_id, duration: DURATION, timeLeft: timeLeft });
+        }, 500);
         
-        if (activeTimer && activeTimer.timeLeft > 0) {
-          // Timer já existe e está ativo - não reinicia, apenas envia o estado atual
-          console.log(`[MATCHES/START] Timer ativo encontrado para sala ${sala_id}, rodada ${payload.rodada_id}. Tempo restante: ${activeTimer.timeLeft}s`);
+        setTimeout(() => {
+          const timeLeft = getTimeLeftForSala(sala_id, DURATION);
+          console.log(`[MATCHES/START] Emitindo round:ready e round:started para sala ${sala_id} (reuso - tentativa 2, timeLeft: ${timeLeft}s)`);
           io.to(String(sala_id)).emit('round:ready', payload);
-          io.to(String(sala_id)).emit('round:started', { roundId: payload.rodada_id, duration: activeTimer.timeLeft });
-          // Não chama scheduleRoundCountdown aqui - o timer já está rodando
-        } else {
-          // Timer não existe ou já expirou - cria um novo timer
-          console.log(`[MATCHES/START] Criando novo timer para sala ${sala_id}, rodada ${payload.rodada_id}, duração ${DURATION}s`);
+          io.to(String(sala_id)).emit('round:started', { roundId: payload.rodada_id, duration: DURATION, timeLeft: timeLeft });
+        }, 1000);
+        
+        setTimeout(() => {
+          const timeLeft = getTimeLeftForSala(sala_id, DURATION);
+          console.log(`[MATCHES/START] Emitindo round:ready e round:started para sala ${sala_id} (reuso - tentativa 3 - fallback, timeLeft: ${timeLeft}s)`);
           io.to(String(sala_id)).emit('round:ready', payload);
-          io.to(String(sala_id)).emit('round:started', { roundId: payload.rodada_id, duration: DURATION });
-          scheduleRoundCountdown({ salaId: sala_id, roundId: payload.rodada_id, duration: DURATION });
-        }
+          io.to(String(sala_id)).emit('round:started', { roundId: payload.rodada_id, duration: DURATION, timeLeft: timeLeft });
+        }, 2000);
+        
+        scheduleRoundCountdown({ salaId: sala_id, roundId: payload.rodada_id, duration: DURATION });
       }
       return res.json({ ok: true, reused: true });
     }
@@ -168,9 +252,34 @@ router.post('/start', async (req, res) => {
         .update({ status: 'in_progress' })
         .eq('rodada_id', created[0].rodada_id);
 
-      // Emite eventos
-      io.to(String(sala_id)).emit('round:ready', created[0]);
-      io.to(String(sala_id)).emit('round:started', { roundId: created[0].rodada_id, duration: DURATION });
+      // Emite eventos múltiplas vezes com delays maiores para garantir que todos os sockets estejam na sala
+      // Importa a função para calcular tempo restante
+      const { getTimeLeftForSala } = await import('../src/sockets.js');
+      
+      // Primeira emissão após 500ms
+      setTimeout(() => {
+        const timeLeft = getTimeLeftForSala(sala_id, DURATION);
+        console.log(`[MATCHES/START] Emitindo round:ready e round:started para sala ${sala_id} (tentativa 1, timeLeft: ${timeLeft}s)`);
+        io.to(String(sala_id)).emit('round:ready', created[0]);
+        io.to(String(sala_id)).emit('round:started', { roundId: created[0].rodada_id, duration: DURATION, timeLeft: timeLeft });
+      }, 500);
+      
+      // Segunda emissão após 1s
+      setTimeout(() => {
+        const timeLeft = getTimeLeftForSala(sala_id, DURATION);
+        console.log(`[MATCHES/START] Emitindo round:ready e round:started para sala ${sala_id} (tentativa 2, timeLeft: ${timeLeft}s)`);
+        io.to(String(sala_id)).emit('round:ready', created[0]);
+        io.to(String(sala_id)).emit('round:started', { roundId: created[0].rodada_id, duration: DURATION, timeLeft: timeLeft });
+      }, 1000);
+      
+      // Terceira emissão após 2s (fallback)
+      setTimeout(() => {
+        const timeLeft = getTimeLeftForSala(sala_id, DURATION);
+        console.log(`[MATCHES/START] Emitindo round:ready e round:started para sala ${sala_id} (tentativa 3 - fallback, timeLeft: ${timeLeft}s)`);
+        io.to(String(sala_id)).emit('round:ready', created[0]);
+        io.to(String(sala_id)).emit('round:started', { roundId: created[0].rodada_id, duration: DURATION, timeLeft: timeLeft });
+      }, 2000);
+      
       scheduleRoundCountdown({ salaId: sala_id, roundId: created[0].rodada_id, duration: DURATION });
     }
 

@@ -1,107 +1,145 @@
+// UploadiaBreno/fronted/src/pages/ProfileScreen.jsx
+
 import { useState, useEffect } from 'react';
-// Presumindo que 'supabase' está acessível globalmente ou importado de um arquivo de configuração
-// import { supabase } from '../lib/api'; // Exemplo de como poderia ser importado
+import api from '../lib/api'; 
+// (CORRIGIDO) Importa 'avatarList' (objetos) e 'DEFAULT_AVATAR' (que é o primeiro objeto da lista)
+import { avatarList, DEFAULT_AVATAR } from '../lib/avatarList'; 
+import GlitchText from '../components/GlitchText'; 
 
 function ProfileScreen() {
-  // O estado ainda armazena os dados do jogador
   const [profileData, setProfileData] = useState({
     nome_de_usuario: '',
     email: '',
+    // (CORRIGIDO) Usamos o .nome do avatar padrão para o estado inicial
+    avatar_nome: DEFAULT_AVATAR.nome, 
   });
 
   const [loading, setLoading] = useState(true);
-  // Removemos os estados de 'message' e 'user', pois não há mais formulário
-  // O 'user' será obtido e usado apenas dentro do useEffect
+  const [isSaving, setIsSaving] = useState(false); 
+
+  // (REMOVIDO) Não precisamos mais disso, pois o .src já vem completo do avatarList
+  // const avatarBasePath = '/avatars/'; 
 
   useEffect(() => {
     const fetchProfile = async () => {
       setLoading(true);
-
       try {
-        // 1. Pega o usuário da sessão de autenticação atual
-        const { data: { user } } = await supabase.auth.getUser();
-        
-        if (user) {
-          // 2. Usa o ID do usuário da sessão para buscar o perfil na tabela 'jogador'
-          let { data: jogador, error } = await supabase
-            .from('jogador')
-            .select('nome_de_usuario, email')
-            .eq('email', user.email) // Buscando o jogador pelo email do usuário logado
-            .single();
-
-          if (error) throw error;
-
-          if (jogador) {
-            setProfileData(jogador);
+        const { data } = await api.get('/auth/me'); 
+        if (data.jogador) {
+          if (!data.jogador.avatar_nome) {
+            // (CORRIGIDO) Usamos o .nome do avatar padrão
+            data.jogador.avatar_nome = DEFAULT_AVATAR.nome;
           }
-        } else {
-          // Se não houver usuário, pode redirecionar ou mostrar mensagem
-          console.log("Nenhum usuário logado encontrado.");
+          setProfileData(data.jogador);
         }
       } catch (error) {
         console.error('Erro ao buscar perfil:', error.message);
-        // Você poderia adicionar um estado de erro para exibir ao usuário aqui
       } finally {
         setLoading(false);
       }
     };
 
     fetchProfile();
-  }, []); // O array de dependências vazio garante que isso rode apenas uma vez
+  }, []);
 
-  // Funções 'handleChange' e 'handleSubmit' foram removidas pois não há edição
-  
-  if (loading) {
-    return <div className="text-white text-center p-10">Carregando...</div>;
-  }
+  const handleRandomAvatar = async () => {
+    // (CORRIGIDO) Usa 'avatarList'
+    if (isSaving || avatarList.length === 0) return;
+    setIsSaving(true);
+    
+    let newAvatarName = profileData.avatar_nome; // (Mudei o nome da var para clareza)
+
+    // (CORRIGIDO) Usa 'avatarList'
+    if (avatarList.length > 1) {
+      do {
+        const randomIndex = Math.floor(Math.random() * avatarList.length);
+        // (CORRIGIDO) Pega apenas o .nome do objeto sorteado
+        newAvatarName = avatarList[randomIndex].nome; 
+      } while (newAvatarName === profileData.avatar_nome);
+    } else if (avatarList.length === 1) {
+       // (CORRIGIDO) Pega apenas o .nome
+      newAvatarName = avatarList[0].nome;
+    }
+    
+    // (CORRIGIDO) Atualiza o estado com o novo nome
+    setProfileData((prev) => ({ ...prev, avatar_nome: newAvatarName }));
+
+    try {
+      // (CORRIGIDO) Envia apenas o nome para a API
+      await api.put('/auth/avatar', { avatar_nome: newAvatarName });
+    } catch (error) {
+      console.error('Erro ao salvar avatar:', error.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // (NOVO) Encontra o objeto do avatar atual para pegar o .src correto
+  const currentAvatar = avatarList.find(
+    avatar => avatar.nome === profileData.avatar_nome
+  ) || DEFAULT_AVATAR;
+
 
   return (
-    <div className="flex justify-center p-8 text-white">
-      <div className="w-full max-w-lg">
-        <h1 className="text-4xl font-bold mb-8 text-center">Meu Perfil</h1>
+    <div className="flex justify-center items-center min-h-screen p-4 sm:p-8 text-white">
+      <div className="w-full max-w-md p-6 sm:p-8 bg-gray-800 rounded-lg shadow-2xl border border-gray-700">
         
-        {/* Espaço para a Foto de Perfil Padrão */}
-        <div className="flex justify-center mb-6">
-          <div className="w-32 h-32 md:w-40 md:h-40 rounded-full bg-gray-700 flex items-center justify-center text-gray-400 border-4 border-gray-600">
-            {/* Você pode usar um SVG ou um <img> para uma foto padrão */}
+        <GlitchText text="Meu perfil" fontSize={2} color="rgb(57, 255, 20)" fontWeight="bold" textAlign="center" font="https://fonts.gstatic.com/s/orbitron/v35/yMJMMIlzdpvBhQQL_SC3X9yhF25-T1ny_Cmxpg.ttf" />
+        
+        <div className="flex flex-col items-center mb-8">
+          
+          <div className="relative w-32 h-32 md:w-40 md:h-40">
+            <img
+              // (CORRIGIDO) Usa o .src do objeto do avatar encontrado
+              src={currentAvatar.src} 
+              alt="Avatar Atual"
+              className="w-full h-full rounded-full bg-gray-700 border-4 border-blue-500 object-cover shadow-lg shadow-blue-500/30"
+            />
+            <div className="absolute inset-0 rounded-full border border-white/10 animate-pulse"></div>
+          </div>
+          
+          <button
+            onClick={handleRandomAvatar}
+            disabled={isSaving || loading}
+            className="mt-4 p-2 rounded-full text-blue-400 hover:text-white hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 transition-all duration-200 disabled:text-gray-600 disabled:bg-transparent disabled:cursor-not-allowed"
+            aria-label="Sortear novo avatar" 
+          >
             <svg 
               xmlns="http://www.w3.org/2000/svg" 
-              className="h-20 w-20 md:h-24 md:w-24" 
+              className={`h-8 w-8 ${isSaving ? 'animate-spin' : ''}`} 
               fill="none" 
               viewBox="0 0 24 24" 
-              stroke="currentColor"
+              stroke="currentColor" 
+              strokeWidth={2}
             >
               <path 
                 strokeLinecap="round" 
                 strokeLinejoin="round" 
-                strokeWidth={1.5} 
-                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" 
+                d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.992 0l3.181 3.183a8.25 8.25 0 0013.803-3.183M4.031 9.348a8.25 8.25 0 0113.803-3.183l3.181 3.183m-4.992-4.992v4.992m0 0H9.345" 
               />
             </svg>
-          </div>
+          </button>
         </div>
 
-        {/* Informações do Perfil (Apenas Visualização) */}
-        <div className="space-y-6">
+        <div className="space-y-6 mb-10">
           <div>
-            <label className="block text-sm font-medium text-gray-300">
+            <label className="block text-sm font-medium text-gray-400 uppercase tracking-wider">
               Nome de Usuário
             </label>
-            <div className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 p-3 shadow-sm sm:text-lg text-white cursor-target">
-              {profileData.nome_de_usuario || 'NeoBoladão'}
+            <div className="mt-1 block w-full rounded-md border-gray-600 bg-gray-900 p-3 shadow-sm sm:text-lg text-white font-mono cursor-default">
+              {profileData.nome_de_usuario || (loading ? 'Carregando...' : 'N/A')}
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-300">
+            <label className="block text-sm font-medium text-gray-400 uppercase tracking-wider">
               Email
             </label>
-            <div className="mt-1 block w-full rounded-md border-gray-600 bg-gray-800 p-3 text-gray-400 shadow-sm sm:text-lg cursor-target">
-              {profileData.email || 'NeoRedpill@outlook.com'}
+            <div className="mt-1 block w-full rounded-md border-gray-600 bg-gray-900 p-3 text-gray-400 shadow-sm sm:text-lg font-mono cursor-default">
+              {profileData.email || (loading ? 'Carregando...' : 'N/A')}
             </div>
           </div>
-          
-          {/* Botão de salvar e mensagens de status foram removidos */}
         </div>
+        
       </div>
     </div>
   );

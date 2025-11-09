@@ -71,13 +71,14 @@ function WaitingRoomScreen() {
                     setSala(salaData); 
                     setError(''); 
                     if (salaData.status === 'in_progress') {
-                         console.log(`[Polling] Detectou status 'in_progress'. Navegando...`);
+                         console.log(`[Polling] Detectou status 'in_progress'. Navegando imediatamente...`);
                          if (intervalId) clearInterval(intervalId); 
                          socket.off('room:players_updated', handlePlayersUpdate);
                          socket.off('room:abandoned', handleRoomAbandoned);
                          socket.off('round:ready', handleGameStarted);
                          socket.off('round:started', handleGameStarted);
-                         navigate(`/game/${salaId}`); 
+                         // Navega imediatamente quando detecta in_progress
+                         navigate(`/game/${salaId}`, { replace: true }); 
                          return; 
                     }
                      if (salaData.status === 'terminada' || salaData.status === 'abandonada') {
@@ -133,23 +134,36 @@ function WaitingRoomScreen() {
            }
        };
        const handleGameStarted = (data) => {
-            console.log("Recebido 'round:ready' ou 'round:started'. Navegando...", data);
+            console.log("Recebido 'round:ready' ou 'round:started'. Navegando imediatamente...", data);
             if (isMounted) {
+                if (intervalId) clearInterval(intervalId);
                 socket.off('room:players_updated', handlePlayersUpdate);
                 socket.off('room:abandoned', handleRoomAbandoned);
                 socket.off('round:ready', handleGameStarted); 
                 socket.off('round:started', handleGameStarted); 
-                navigate(`/game/${salaId}`); 
+                navigate(`/game/${salaId}`, { replace: true }); 
             }
        };
+       // Registra listeners ANTES de entrar na sala
        socket.on('room:players_updated', handlePlayersUpdate);
        socket.on('room:abandoned', handleRoomAbandoned);
        socket.on('round:ready', handleGameStarted); 
-       socket.on('round:started', handleGameStarted); 
+       socket.on('round:started', handleGameStarted);
+       
+       // Garante que o socket está na sala
        socket.emit('join-room', String(salaId)); 
        console.log(`Socket join-room emitido para sala ${salaId}`);
+       
+       // Re-emite join-room após um pequeno delay para garantir conexão
+       setTimeout(() => {
+         socket.emit('join-room', String(salaId));
+         console.log(`Socket join-room re-emitido para sala ${salaId} (garantia)`);
+       }, 500);
         fetchSalaState(true); 
-        intervalId = setInterval(fetchSalaState, 5000); 
+        // Polling mais frequente (1s) para detectar início mais rápido
+        intervalId = setInterval(() => {
+          fetchSalaState(false);
+        }, 1000); // Polling a cada 1 segundo 
         return () => { 
             console.log("Limpando WaitingRoomScreen"); 
             isMounted = false; 
@@ -180,7 +194,7 @@ function WaitingRoomScreen() {
                 <button
                     onClick={handleLeaveRoom} 
                     disabled={leaving} 
-                    className="absolute top-4 left-4 md:top-6 md:left-6 text-text-muted hover:text-primary transition-colors flex items-center gap-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-target" 
+                    className="absolute top-4 left-4 md:top-6 md:left-6 text-text-muted hover:text-primary transition-colors flex items-center gap-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed" 
                     title="Sair da sala" 
                 >
                     {leaving ? <Loader2 size={16} className="animate-spin" /> : <ArrowLeft size={16} />} 
@@ -197,7 +211,7 @@ function WaitingRoomScreen() {
                         <span className="text-2xl font-mono text-warning bg-black/50 px-3 py-1 rounded border border-dashed border-warning/50"> 
                             {salaId} 
                         </span>
-                        <button onClick={copyToClipboard} title="Copiar ID" className="text-text-muted hover:text-warning transition-colors p-1 cursor-target"> 
+                        <button onClick={copyToClipboard} title="Copiar ID" className="text-text-muted hover:text-warning transition-colors p-1"> 
                             <ClipboardCopy size={20}/> 
                         </button>
                     </div>
@@ -251,8 +265,11 @@ function WaitingRoomScreen() {
                                 disabled={loading || sala.jogadores?.length < 2} 
                                 className="px-8 py-3 md:px-10 md:py-4 bg-accent text-black rounded-lg font-bold text-lg md:text-xl 
                                            hover:bg-accent/80 disabled:bg-gray-500 disabled:cursor-not-allowed 
-                                           transition-all hover:scale-105 hover:[transform:translateZ(15px)] active:[transform:translateZ(5px)]
-                                           flex items-center justify-center gap-2 mx-auto shadow-lg shadow-accent/20 cursor-target" 
+                                           transition-all 
+                                           [transform:translateZ(0px)]
+                                           hover:scale-105 hover:[transform:translateZ(15px)] active:[transform:translateZ(5px)]
+                                           flex items-center justify-center gap-2 mx-auto shadow-lg shadow-accent/20
+                                           relative z-10" 
                                 title={sala.jogadores?.length < 2 ? "Precisa de pelo menos 2 conexões para iniciar" : "Iniciar a partida"} 
                                 data-augmented-ui="tl-scoop tr-scoop br-scoop bl-scoop"
                             >
