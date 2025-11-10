@@ -18,9 +18,8 @@ export async function saveRanking({ salaId, totais, winnerInfo }) {
     const records = []
     for (const jogadorId of jogadores) {
       const pontuacao = totais[jogadorId] || 0
-      const isWinner = winnerInfo?.empate
-        ? winnerInfo.jogadores?.includes(jogadorId)
-        : winnerInfo?.jogador_id === jogadorId
+      // Em caso de empate, nenhum jogador recebe vitória
+      const isWinner = !winnerInfo?.empate && winnerInfo?.jogador_id === jogadorId
 
       records.push({
         jogador_id: jogadorId,
