@@ -97,7 +97,7 @@ export default function Header() {
   if (userLoading) {
     return (
       <header className="absolute top-0 left-0 right-0 z-50 flex items-center justify-between p-4 bg-black/30 backdrop-blur-sm border-b border-primary/20">
-         <Link to="/lobby" className="text-2xl font-bold text-primary hover:text-accent transition-colors font-cyber" title="Voltar ao Lobby">
+         <Link to="/" className="text-2xl font-bold text-primary hover:text-accent transition-colors font-cyber" title="Voltar à Tela Inicial">
             CYBER-STOP
          </Link>
          {/* Não mostra nada enquanto carrega */}
@@ -116,7 +116,7 @@ export default function Header() {
   return (
     <header className="absolute top-0 left-0 right-0 z-50 flex items-center justify-between p-4 bg-black/30 backdrop-blur-sm border-b border-primary/20">
       {/* Logo ou Nome do Jogo */}
-      <Link to="/lobby" className="text-2xl font-bold text-primary hover:text-accent transition-colors font-cyber" title="Voltar ao Lobby">
+      <Link to="/" className="text-2xl font-bold text-primary hover:text-accent transition-colors font-cyber" title="Voltar à Tela Inicial">
         CYBER-STOP
       </Link>
 
