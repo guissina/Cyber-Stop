@@ -14,6 +14,7 @@ import JumpscareOverlay from '../components/game/JumpscareOverlay';
 import MatchEndScreen from '../components/game/MatchEndScreen';
 import WaitingForRound from '../components/game/WaitingForRound';
 import ActiveRound from '../components/game/ActiveRound';
+import RoundEndScreen from '../components/game/RoundEndScreen';
 
 export default function GameScreen() {
   const { salaId } = useParams();
@@ -33,7 +34,7 @@ export default function GameScreen() {
   } = useGameSocket(salaId); // Não precisa mais da callback
   
   // Desestrutura o estado para passar para os outros hooks
-  const { rodadaId, isLocked, finalizado, totais, vencedor } = gameState;
+  const { rodadaId, isLocked, finalizado, totais, vencedor, roundResults } = gameState;
   const { activeSkipPowerUpId, setActiveSkipPowerUpId, activeSkipOpponentPowerUpId, setActiveSkipOpponentPowerUpId } = effectsState;
 
   // 2. Hook de Input: Passa o gameState para ele
@@ -148,6 +149,14 @@ export default function GameScreen() {
           meuJogadorId={meuJogadorId}
           salaId={salaId}
           onReFetchInventory={fetchInventory} // Passa a função para rebuscar moedas
+        /> 
+        ) : roundResults ? ( 
+        <RoundEndScreen
+          results={roundResults}
+          temas={gameState.temas} // Passa os temas da rodada anterior
+          jogadores={gameState.jogadores} // Você precisará garantir que 'jogadores' esteja no gameState
+          salaId={salaId}
+          meuJogadorId={meuJogadorId}
         />
       ) : !rodadaId ? (
         // Tela de "Aguardando"

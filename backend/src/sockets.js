@@ -239,6 +239,7 @@ export function scheduleRoundCountdown({ salaId, roundId, duration = 20 }) { //
         // Ele fazia o timer se auto-bloquear.
         // --- FIM DA CORREÇÃO ---
 
+        // *** MODIFICADO PELO PASSO 4: `endRoundAndScore` agora retorna `roundDetails` ***
         const payload = await endRoundAndScore({ 
           salaId, 
           roundId, 
@@ -296,6 +297,7 @@ export function scheduleRoundCountdown({ salaId, roundId, duration = 20 }) { //
         }
         // --- FIM LÓGICA REVELAÇÃO ---
 
+        // *** O 'payload' agora contém 'roundDetails' ***
         io.to(salaId).emit('round:end', payload); // Emite o resultado NORMALMENTE
 
         const next = await getNextRoundForSala({ salaId, afterRoundId: roundId }); //
@@ -425,6 +427,7 @@ export function initSockets(httpServer) { //
         if (alreadyScored(salaId, roundId)) {
             console.warn(`[STOP] Rodada ${roundId} já foi pontuada. Buscando resultados existentes para mostrar placar.`);
             // Busca os resultados já calculados e os envia
+            // *** MODIFICADO PELO PASSO 4: `getRoundResults` agora retorna `roundDetails` ***
             const payload = await getRoundResults({ salaId, roundId });
             io.to(salaId).emit('round:end', payload);
             
@@ -470,6 +473,7 @@ export function initSockets(httpServer) { //
          if (scoredRounds.has(`${salaId}-${roundId}`)) {
              console.warn(`[STOP] Rodada ${roundId} já foi pontuada durante GRACE_MS (concorrência?). Buscando resultados existentes.`);
              // Busca os resultados já calculados e os envia mesmo assim
+             // *** MODIFICADO PELO PASSO 4: `getRoundResults` agora retorna `roundDetails` ***
              const payload = await getRoundResults({ salaId, roundId });
              io.to(salaId).emit('round:end', payload);
              
@@ -505,6 +509,7 @@ export function initSockets(httpServer) { //
              return; // Retorna aqui para não processar novamente
          }
 
+        // *** MODIFICADO PELO PASSO 4: `endRoundAndScore` agora retorna `roundDetails` ***
         const payload = await endRoundAndScore({ 
           salaId, 
           roundId, 
@@ -559,6 +564,7 @@ export function initSockets(httpServer) { //
         }
         // --- FIM LÓGICA REVELAÇÃO ---
 
+        // *** O 'payload' agora contém 'roundDetails' ***
         io.to(salaId).emit('round:end', payload); // Emite resultado NORMALMENTE
 
         const next = await getNextRoundForSala({ salaId, afterRoundId: roundId }); //
@@ -897,6 +903,26 @@ export function initSockets(httpServer) { //
             socket.emit('powerup:error', { message: e.message || 'Erro ao processar power-up.' }); //
         }
     });
+
+    // *** INÍCIO DA MODIFICAÇÃO DO PASSO 5 ***
+    socket.on('player:react', ({ salaId, emojiId }) => {
+      const jogadorId = socket.data.jogador_id;
+      
+      // Validação básica
+      if (!salaId || !emojiId || !jogadorId) {
+        console.warn(`[REACTION] Evento inválido:`, { salaId, emojiId, jogadorId });
+        return;
+      }
+
+      console.log(`[REACTION] Jogador ${jogadorId} enviou '${emojiId}' para sala ${salaId}`);
+
+      // Emite para TODOS na sala (incluindo o remetente)
+      io.to(salaId).emit('player:reacted', {
+        fromPlayerId: jogadorId,
+        emojiId: emojiId
+      });
+    });
+    // *** FIM DA MODIFICAÇÃO DO PASSO 5 ***
 
     socket.on('disconnect', (reason) => { //
         console.log('user disconnected:', socket.id, 'jogador_id:', socket.data.jogador_id, 'reason:', reason); //

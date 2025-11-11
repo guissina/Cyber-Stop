@@ -1,20 +1,26 @@
 // src/hooks/useGameSocket.js
 import { useState, useEffect } from 'react';
 import socket, { joinRoom } from '../lib/socket';
-import api from '../lib/api'; // <-- 1. IMPORTAR API
+import api from '../lib/api'; 
 
 // 1. Remova 'onReceivingAnswers' dos parâmetros
 export function useGameSocket(salaId) {
-  // ... (Todos os useState continuam iguais)
+  // ... (Estados antigos)
   const [rodadaId, setRodadaId] = useState(null);
   const [letra, setLetra] = useState('');
   const [temas, setTemas] = useState([]);
   const [timeLeft, setTimeLeft] = useState(null);
-  const [placarRodada, setPlacarRodada] = useState({});
+  // const [placarRodada, setPlacarRodada] = useState({}); // <-- SUBSTITUÍDO
   const [totais, setTotais] = useState({});
   const [finalizado, setFinalizado] = useState(false);
   const [vencedor, setVencedor] = useState(null);
   const [isLocked, setIsLocked] = useState(true);
+  
+  // --- NOSSOS NOVOS ESTADOS ---
+  const [roundResults, setRoundResults] = useState(null); // Armazena os resultados detalhados (palavras + pontos)
+  const [lastReaction, setLastReaction] = useState(null); // Armazena a última reação de emoji recebida
+  // --- FIM DOS NOVOS ESTADOS ---
+
   const [showJumpscare, setShowJumpscare] = useState(false);
   const [jumpscareData, setJumpscareData] = useState({});
   const [activeSkipPowerUpId, setActiveSkipPowerUpId] = useState(null);
@@ -27,7 +33,6 @@ export function useGameSocket(salaId) {
     console.log(`useGameSocket INICIADO. Conectando à sala ${salaId}...`);
     joinRoom(salaId);
 
-    // ... (onReady, onStarted, onTick... continuam iguais)
     const onReady = (data) => {
       console.log("round:ready recebido:", data);
       setRodadaId(data.rodada_id);
@@ -35,30 +40,57 @@ export function useGameSocket(salaId) {
       setTemas(data.temas || []);
       setTimeLeft(null);
       setIsLocked(true);
+      // setPlacarRodada({}); // <-- REMOVIDO
+      setTotais({}); 
+      setFinalizado(false);
+      setVencedor(null);
+      
+      // Limpa estados de power-up da rodada anterior
       setActiveSkipPowerUpId(null);
       setActiveSkipOpponentPowerUpId(null);
       setRevealPending(false);
       setRevealedAnswer(null);
       setShowJumpscare(false);
-      setPlacarRodada({});
-      setTotais({}); // Garante que totais da rodada anterior são limpos
-      setFinalizado(false);
-      setVencedor(null);
     };
+
     const onStarted = ({ duration, timeLeft }) => {
       console.log("round:started recebido, duração:", duration, "tempo restante:", timeLeft);
-      // Se timeLeft foi fornecido (rodada já em andamento), usa ele; senão usa duration (rodada nova)
       setTimeLeft(timeLeft !== undefined ? timeLeft : duration);
       setIsLocked(false);
+      
+      // --- MUDANÇA IMPORTANTE ---
+      // Limpa os resultados da rodada anterior para a tela de jogo reaparecer
+      setRoundResults(null); 
+      // --- FIM DA MUDANÇA ---
     };
+
     const onTick = (t) => { setTimeLeft(t); };
-    const onEnd = ({ roundId, roundScore, totais }) => {
-      console.log("round:end recebido:", { roundId, roundScore, totais });
-      setPlacarRodada(roundScore || {});
-      setTotais(totais || {});
+
+    // --- MUDANÇA IMPORTANTE: O onEnd agora controla a tela de resultados ---
+    const onEnd = (payload) => {
+      // O payload do backend agora deve enviar { roundId, roundDetails, totais }
+      console.log("round:end recebido, salvando resultados:", payload);
+      
+      // 1. Salva os resultados detalhados (palavras + pontos)
+      // Usamos 'payload.roundDetails' (do backend) para 'roundResults' (estado frontend)
+      setRoundResults(payload.roundDetails || {}); 
+      
+      // 2. Salva os totais atualizados
+      setTotais(payload.totais || {});
+      
+      // 3. Trava o tempo e o estado
       setTimeLeft(null);
       setIsLocked(true);
+      
+      // 4. IMPORTANTE: Limpa a rodada ativa
+      // Isso sinaliza ao GameScreen que a rodada de jogo acabou
+      // e a tela de resultados deve ser mostrada.
+      setRodadaId(null);
+      setLetra('');
+      setTemas([]);
     };
+    // --- FIM DA MUDANÇA ---
+
     const onMatchEnd = ({ totais, vencedor }) => {
       console.log("match:end recebido:", { totais, vencedor });
       setFinalizado(true);
@@ -66,6 +98,8 @@ export function useGameSocket(salaId) {
       setVencedor(vencedor);
       setIsLocked(true);
     };
+    
+    // ... (Listeners de Jumpscare, Skip, etc. continuam iguais)
     const onJumpscareEffect = ({ attackerId, image, sound, duration }) => {
         console.log(`effect:jumpscare recebido de ${attackerId}, duração: ${duration}s`);
         setJumpscareData({ attackerId, image, sound, duration });
@@ -84,7 +118,6 @@ export function useGameSocket(salaId) {
         setRevealedAnswer({ temaNome, resposta, oponenteId });
         setRevealPending(false);
     };
-    // Handler para categoria desconsiderada - será sobrescrito no GameScreen se necessário
     const onCategoryDisregarded = ({ temaId, temaNome, attackerId }) => {
         console.log(`effect:category_disregarded recebido: Categoria ${temaId} (${temaNome}) desconsiderada por jogador ${attackerId}`);
         // Este evento será tratado no GameScreen para atualizar o estado de input
@@ -104,21 +137,27 @@ export function useGameSocket(salaId) {
         alert(`Ocorreu um erro no servidor (${context}). Tente novamente ou recarregue a página.`);
     };
     
-    // 2. Simplifique o onStopping
     const onStopping = async ({ roundId }) => {
       console.log("round:stopping recebido:", roundId);
       setIsLocked(true);
-      // A responsabilidade de enviar respostas foi movida para o GameScreen.jsx
     };
+    
+    // --- NOVO LISTENER: Para receber reações de emoji ---
+    const onPlayerReacted = (data) => {
+        console.log(`player:reacted recebido: ${data.fromPlayerId} enviou ${data.emojiId}`);
+        // Adiciona um timestamp para garantir que o estado mude
+        // e dispare uma re-renderização, mesmo que o emoji seja o mesmo
+        setLastReaction({ ...data, timestamp: Date.now() }); 
+    };
+    // --- FIM DO NOVO LISTENER ---
 
-    // ... (Todos os outros listeners continuam iguais)
 
     // Registrar todos os listeners
     socket.on('round:ready', onReady);
     socket.on('round:started', onStarted);
     socket.on('round:tick', onTick);
-    socket.on('round:stopping', onStopping); // Listener ainda existe
-    socket.on('round:end', onEnd);
+    socket.on('round:stopping', onStopping); 
+    socket.on('round:end', onEnd); // Modificado
     socket.on('match:end', onMatchEnd);
     socket.on('effect:jumpscare', onJumpscareEffect);
     socket.on('effect:enable_skip', onEnableSkip);
@@ -128,26 +167,21 @@ export function useGameSocket(salaId) {
     socket.on('powerup:ack', onPowerUpAck);
     socket.on('powerup:error', onPowerUpError);
     socket.on('app:error', onAppError);
+    socket.on('player:reacted', onPlayerReacted); // NOVO
 
-
-    // --- 2. INÍCIO DA NOVA CORREÇÃO ---
-    // Função para buscar rodada atual sem reiniciar timer
+    // ... (Lógica de fetchCurrentRound continua igual)
     const fetchCurrentRound = async () => {
       try {
         console.log(`[useGameSocket] Buscando rodada atual para sala ${salaId}...`);
         const response = await api.get(`/matches/current/${salaId}`);
         if (response.data.hasActiveRound) {
           console.log(`[useGameSocket] Rodada atual encontrada, eventos serão emitidos pelo backend`);
-          // Os eventos round:ready e round:started serão emitidos pelo backend
-          // sem reiniciar o timer
         } else {
           console.log(`[useGameSocket] Nenhuma rodada ativa. Iniciando nova partida...`);
-          // Se não há rodada ativa, inicia uma nova
           await api.post('/matches/start', { sala_id: Number(salaId), duration: 20 });
         }
       } catch (error) {
         console.error("[useGameSocket] Erro ao buscar rodada atual:", error);
-        // Se der erro, tenta iniciar uma nova partida como fallback
         try {
           await api.post('/matches/start', { sala_id: Number(salaId), duration: 20 });
         } catch (startError) {
@@ -157,20 +191,16 @@ export function useGameSocket(salaId) {
       }
     };
 
-    // Se o socket já estiver conectado, busca rodada atual.
     if (socket.connected) {
       fetchCurrentRound();
     } else {
-      // Se não, espera conectar e *então* busca.
       socket.once('connect', fetchCurrentRound);
     }
-    // --- FIM DA NOVA CORREÇÃO ---
 
 
     // Função de limpeza
     return () => {
       console.log("Limpando listeners do useGameSocket");
-      // ... (todos os socket.off)
       socket.off('round:ready', onReady);
       socket.off('round:started', onStarted);
       socket.off('round:tick', onTick);
@@ -185,11 +215,12 @@ export function useGameSocket(salaId) {
       socket.off('powerup:ack', onPowerUpAck);
       socket.off('powerup:error', onPowerUpError);
       socket.off('app:error', onAppError);
-      socket.off('connect', fetchCurrentRound); // Limpa o listener 'connect' também
+      socket.off('connect', fetchCurrentRound); 
+      socket.off('player:reacted', onPlayerReacted); // NOVO
     };
-  }, [salaId]); // 3. A dependência 'onReceivingAnswers' foi removida
+  }, [salaId]); 
 
-  // Retorno continua igual
+  // --- MUDANÇA NO RETORNO ---
   return {
     socket,
     gameState: {
@@ -197,7 +228,8 @@ export function useGameSocket(salaId) {
       letra,
       temas,
       timeLeft,
-      placarRodada,
+      // placarRodada, // <-- SUBSTITUÍDO
+      roundResults, // <-- NOVO
       totais,
       finalizado,
       vencedor,
@@ -213,6 +245,8 @@ export function useGameSocket(salaId) {
       setActiveSkipOpponentPowerUpId,
       revealPending,
       revealedAnswer,
+      lastReaction, // <-- NOVO
     }
   };
+  // --- FIM DA MUDANÇA NO RETORNO ---
 }

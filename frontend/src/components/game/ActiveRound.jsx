@@ -1,6 +1,7 @@
 // src/components/game/ActiveRound.jsx
 import CategoryRow from '../CategoryRow';
 import { Zap, Loader2, Star, SkipForward, Eye, Ghost } from 'lucide-react';
+import PowerUpRadialMenu from './PowerUpRadialMenu'; // <-- 1. Importa o novo componente
 
 export default function ActiveRound({
   salaId,
@@ -40,6 +41,7 @@ export default function ActiveRound({
     setActiveSkipOpponentPowerUpId(null); 
   };
 
+  // Lógica para lidar com o clique no power-up (a mesma de antes)
   const onUsePowerUp = (powerUp) => {
     if (powerUp.code === 'SKIP_OWN_CATEGORY' && activeSkipPowerUpId) {
       alert("Pular Categoria já está ativo!"); return;
@@ -51,19 +53,16 @@ export default function ActiveRound({
       alert("Você já ativou a revelação para esta rodada."); return;
     }
     if (powerUp.code === 'SKIP_WORD') {
-      // Mostra um diálogo para escolher qual palavra pular
       const temasList = temas.map(t => t.nome).join(', ');
       const escolha = window.prompt(`Qual palavra você deseja pular?\n\nTemas disponíveis: ${temasList}`);
-      if (!escolha) return; // Usuário cancelou
+      if (!escolha) return; 
       
-      // Verifica se a escolha é válida
       const temaEscolhido = temas.find(t => t.nome.toLowerCase().trim() === escolha.toLowerCase().trim());
       if (!temaEscolhido) {
         alert(`Tema "${escolha}" não encontrado nesta rodada.`);
         return;
       }
       
-      // Passa o nome do tema para o handleUsePowerUp
       handleUsePowerUp(powerUp, temaEscolhido.nome);
       return;
     }
@@ -111,7 +110,6 @@ export default function ActiveRound({
                     value={isSkipped ? '--- PULADO ---' : (isDisregarded ? '--- DESCONSIDERADA ---' : (answers[t.id] || ''))}
                     onChange={e => updateAnswer(t.id, e.target.value)}
                     isDisabled={isLocked || timeLeft === 0 || isSkipped || isDisregarded}
-                    // Passa a classe para o input quando pulado ou desconsiderado
                     inputClassName={isSkipped ? 'text-text-muted/70 italic bg-bg-input/50' : (isDisregarded ? 'text-red-400/70 italic bg-red-900/30' : '')}
                   />
                   {/* Botão de Pular */}
@@ -157,28 +155,26 @@ export default function ActiveRound({
             STOP!
           </button>
 
-          {/* Seção de Power-ups disponíveis */}
-          <div className="flex items-center gap-2 flex-wrap justify-center md:justify-end flex-grow">
-             <h3 className="text-sm font-semibold mr-2 text-secondary w-full md:w-auto text-center md:text-right hidden sm:block">Módulos (Power-ups):</h3>
-              {loadingInventory && <Loader2 className="animate-spin text-secondary" />}
-              {!loadingInventory && inventario.length === 0 && <span className="text-xs text-text-muted/70 italic">Nenhum</span>}
-              {!loadingInventory && inventario.map(p => (
-                  <button
-                      key={p.power_up_id}
-                      onClick={() => onUsePowerUp(p)} 
-                      disabled={isLocked || timeLeft === 0}
-                      className="bg-primary/80 border border-primary text-white px-3 py-1 rounded-full text-xs font-semibold shadow-lg shadow-primary/30
-                                 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 transition-transform hover:scale-110"
-                      title={`${p.nome} - ${p.descricao} (x${p.quantidade})`}
-                  >
-                      <Zap size={12} /> {p.nome} <span className="bg-bg-primary text-secondary text-[10px] px-1.5 py-0.5 rounded-full ml-1">{p.quantidade}</span>
-                  </button>
-              ))}
+          {/* --- 2. Bloco de Power-ups SUBSTITUÍDO --- */}
+          <div className="flex items-center justify-center md:justify-end flex-grow relative">
+            {!loadingInventory && (
+              <PowerUpRadialMenu
+                inventario={inventario}
+                onUsePowerUp={onUsePowerUp} // Passa a função onUsePowerUp
+                isLocked={isLocked}
+                timeLeft={timeLeft}
+              />
+            )}
+            {loadingInventory && <Loader2 className="animate-spin text-secondary h-12 w-12" />}
           </div>
+          {/* --- Fim da substituição --- */}
+
         </div>
 
+        {/* --- INÍCIO DAS CORREÇÕES '|| {}' --- */}
+
         {/* Área de Resultados da Rodada / Revelação / Totais */}
-        {(Object.keys(placarRodada).length > 0 || revealedAnswer || revealPending) && (
+        {(Object.keys(placarRodada || {}).length > 0 || revealedAnswer || revealPending) && (
           <div 
             className="mt-6 bg-bg-secondary p-4 rounded-lg shadow space-y-4"
             data-augmented-ui="tl-clip tr-clip br-clip bl-clip border inlay"
@@ -203,15 +199,15 @@ export default function ActiveRound({
             )}
 
             {/* Placar da Rodada */}
-            {Object.keys(placarRodada).length > 0 && (
+            {Object.keys(placarRodada || {}).length > 0 && (
               <div>
                 <h3 className="font-semibold text-lg mb-2 text-warning">⭐ Placar da Rodada {rodadaId} ⭐</h3>
                 <div className="space-y-1 text-sm">
-                  {Object.entries(placarRodada).map(([tema, scores]) => (
+                  {Object.entries(placarRodada || {}).map(([tema, scores]) => (
                       <div key={tema} className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-bg-input/50 px-2 py-1 rounded gap-1 sm:gap-3">
                         <span className="text-text-muted font-medium uppercase">{tema}:</span>
                         <div className="flex flex-wrap gap-x-3 gap-y-1 font-mono text-xs sm:text-sm">
-                            {Object.entries(scores).map(([jId, pts]) => (
+                            {Object.entries(scores || {}).map(([jId, pts]) => (
                               <span key={jId} className={Number(jId) === meuJogadorId ? 'text-accent' : 'text-secondary'}>
                                 Jgdr {jId}: <b className={`font-bold ${pts > 0 ? (pts === 10 ? 'text-warning' : 'text-orange-400') : 'text-text-muted/50'}`}>{pts}pts</b>
                               </span>
@@ -224,11 +220,11 @@ export default function ActiveRound({
             )}
 
              {/* Totais Acumulados */}
-             {Object.keys(totais).length > 0 && (
+             {Object.keys(totais || {}).length > 0 && (
                <div>
                   <h3 className="font-semibold text-lg mt-4 mb-1 text-warning">📊 Totais Acumulados</h3>
                    <div className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-sm">
-                     {Object.entries(totais).map(([jId, pts]) => (
+                     {Object.entries(totais || {}).map(([jId, pts]) => (
                        <span key={jId} className={Number(jId) === meuJogadorId ? 'text-accent' : 'text-secondary'}>
                           Jogador {jId}: <b className="text-xl">{pts}pts</b>
                        </span>
@@ -238,21 +234,21 @@ export default function ActiveRound({
              )}
 
             {/* Mensagem "Aguardando próxima rodada" */}
-            {Object.keys(placarRodada).length > 0 && (
+            {Object.keys(placarRodada || {}).length > 0 && (
                <p className="text-center mt-4 text-text-muted text-sm italic">Aguardando próximo NÓ...</p>
             )}
           </div>
         )}
 
         {/* Totais (se o placar da rodada ainda não chegou) */}
-        {(Object.keys(placarRodada).length === 0 && !revealedAnswer && !revealPending && Object.keys(totais).length > 0 && !finalizado && rodadaId) && (
+        {(Object.keys(placarRodada || {}).length === 0 && !revealedAnswer && !revealPending && Object.keys(totais || {}).length > 0 && !finalizado && rodadaId) && (
            <div 
              className="mt-6 bg-bg-secondary p-4 rounded-lg shadow"
              data-augmented-ui="tl-clip tr-clip br-clip bl-clip border inlay"
            >
                <h3 className="font-semibold text-lg mb-1 text-warning">📊 Totais Acumulados</h3>
                <div className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-sm">
-                  {Object.entries(totais).map(([jId, pts]) => (
+                  {Object.entries(totais || {}).map(([jId, pts]) => (
                       <span key={jId} className={Number(jId) === meuJogadorId ? 'text-accent' : 'text-secondary'}>
                       Jogador {jId}: <b className="text-xl">{pts}pts</b>
                       </span>

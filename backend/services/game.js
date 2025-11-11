@@ -229,6 +229,8 @@ async function loadLexiconMap({ temaIds, letraId }) {
 /**
  * HARDENING: encerra rodada com lock e pontua com base no dicionário
  * ATUALIZADO: Lógica de pontuação refeita para N jogadores
+ *
+ * *** PASSO 4 - MODIFICAÇÃO 1 INICIA AQUI ***
  */
 export async function endRoundAndScore({ salaId, roundId, skippedWordsSet = null, disregardedOpponentWordsSet = null }) {
   // 🔒 Tenta ganhar o "lock" para evitar pontuação dupla
@@ -244,7 +246,8 @@ export async function endRoundAndScore({ salaId, roundId, skippedWordsSet = null
     // Outro processo (ou o mesmo, em caso de erro anterior) já está pontuando ou já pontuou.
     console.warn(`[endRoundAndScore] Lock não adquirido ou rodada ${roundId} já em scoring/done.`);
     // Retorna os totais atuais para consistência, mas sem calcular placar da rodada novamente.
-    return { roundId, roundScore: {}, totais: await computeTotaisSala({ salaId }) }
+    // *** MODIFICADO: Chama getRoundResults para pegar os dados corretos ***
+    return await getRoundResults({ salaId, roundId });
   }
 
   // ==== Fluxo normal de pontuação ====
@@ -262,7 +265,7 @@ export async function endRoundAndScore({ salaId, roundId, skippedWordsSet = null
         console.warn(`[endRoundAndScore] Nenhum jogador participou da rodada ${roundId}. Abortando pontuação.`);
         // Marca como done mesmo assim para não bloquear
         await supa.from('rodada').update({ status: 'done' }).eq('rodada_id', roundId);
-        return { roundId, roundScore: {}, totais: {} }; // Retorna vazio
+        return { roundId, roundDetails: {}, totais: {} }; // Retorna vazio
     }
   }
 
@@ -270,7 +273,7 @@ export async function endRoundAndScore({ salaId, roundId, skippedWordsSet = null
   if (!temas || temas.length === 0) {
       console.warn(`[endRoundAndScore] Rodada ${roundId} não tem temas associados. Abortando pontuação.`);
       await supa.from('rodada').update({ status: 'done' }).eq('rodada_id', roundId);
-      return { roundId, roundScore: {}, totais: await computeTotaisSala({ salaId }) };
+      return { roundId, roundDetails: {}, totais: await computeTotaisSala({ salaId }) };
   }
   
   // Garante que existe uma linha em participacao_rodada para cada jogador/tema
@@ -285,7 +288,7 @@ export async function endRoundAndScore({ salaId, roundId, skippedWordsSet = null
       console.error(`[endRoundAndScore] Falha ao carregar core da rodada ${roundId}.`);
       // Não reverter o status 'scoring' aqui, marcar como done
       await supa.from('rodada').update({ status: 'done' }).eq('rodada_id', roundId);
-      return { roundId, roundScore: {}, totais: await computeTotaisSala({ salaId }) };
+      return { roundId, roundDetails: {}, totais: await computeTotaisSala({ salaId }) };
   }
   const letraId = core.letra_id
   const letraChar = core.letra?.toUpperCase() || ''
@@ -295,7 +298,8 @@ export async function endRoundAndScore({ salaId, roundId, skippedWordsSet = null
   const temaIds = temas.map(t => t.tema_id)
   const lexicon = await loadLexiconMap({ temaIds, letraId })
 
-  const roundScore = {} // Objeto para guardar o placar desta rodada { tema_nome: { jogador_id: pontos } }
+  // *** MODIFICADO: Renomeado roundScore para roundDetails ***
+  const roundDetails = {} // Objeto para guardar o placar detalhado desta rodada { tema_nome: { jogador_id: { resposta, pontos } } }
   const allJogadorIds = [...jogadores] // Lista de IDs de todos os jogadores na sala/participantes
 
   // Itera sobre cada tema da rodada
@@ -359,14 +363,22 @@ export async function endRoundAndScore({ salaId, roundId, skippedWordsSet = null
       }
     }
 
-    // 3. Salva a pontuação no banco de dados e constrói o payload 'roundScore' para o frontend
-    roundScore[temaNome] = {}
+    // 3. Salva a pontuação no banco de dados e constrói o payload 'roundDetails' para o frontend
+    // *** MODIFICADO: Usa roundDetails ***
+    roundDetails[temaNome] = {}
     for (const jId of allJogadorIds) {
       const p = temaRespostas[jId].pontos
+      const resposta = temaRespostas[jId].resposta
+      
       // Salva a pontuação (0, 5 ou 10) na tabela 'participacao_rodada'
       await savePontuacao({ rodadaId: roundId, temaNome, jogadorId: jId, pontos: p })
+      
       // Adiciona ao objeto que será enviado para o frontend
-      roundScore[temaNome][jId] = p
+      // *** MODIFICADO: Salva resposta E pontos ***
+      roundDetails[temaNome][jId] = { 
+        resposta: resposta, 
+        pontos: p 
+      }
     }
   }
 
@@ -377,9 +389,17 @@ export async function endRoundAndScore({ salaId, roundId, skippedWordsSet = null
   await supa.from('rodada').update({ status: 'done' }).eq('rodada_id', roundId)
 
   // Retorna o resultado da rodada e os totais
-  return { roundId, roundScore, totais }
+  // *** MODIFICADO: Retorna roundDetails ***
+  return { roundId, roundDetails, totais }
 }
+/**
+ * *** PASSO 4 - MODIFICAÇÃO 1 TERMINA AQUI ***
+ */
 
+
+/**
+ * *** PASSO 4 - MODIFICAÇÃO 2 INICIA AQUI ***
+ */
 // Função auxiliar para buscar resultados de uma rodada já pontuada
 export async function getRoundResults({ salaId, roundId }) {
   try {
@@ -397,38 +417,51 @@ export async function getRoundResults({ salaId, roundId }) {
     // Busca os temas da rodada
     const temas = await getTemasDaRodada(roundId);
     if (!temas || temas.length === 0) {
-      return { roundId, roundScore: {}, totais: await computeTotaisSala({ salaId }) };
+      // *** MODIFICADO: Retorna roundDetails vazio ***
+      return { roundId, roundDetails: {}, totais: await computeTotaisSala({ salaId }) };
     }
 
     // Busca os resultados pontuados do banco
+    // *** MODIFICADO: Seleciona 'resposta' também ***
     const { data: participacoes, error } = await supa
       .from('participacao_rodada')
-      .select('jogador_id, tema_nome, pontos')
+      .select('jogador_id, tema_nome, pontos, resposta') // <-- MUDANÇA AQUI
       .eq('rodada_id', roundId)
       .in('jogador_id', jogadores)
       .in('tema_nome', temas.map(t => t.tema_nome));
 
     if (error) throw error;
 
-    // Constrói o roundScore no formato esperado
-    const roundScore = {};
+    // Constrói o roundDetails no formato esperado
+    // *** MODIFICADO: Renomeado roundScore para roundDetails ***
+    const roundDetails = {};
     for (const tema of temas) {
-      roundScore[tema.tema_nome] = {};
+      roundDetails[tema.tema_nome] = {};
       for (const jId of jogadores) {
         const participacao = participacoes?.find(p => p.jogador_id === jId && p.tema_nome === tema.tema_nome);
-        roundScore[tema.tema_nome][jId] = participacao?.pontos || 0;
+        // *** MODIFICADO: Salva objeto { resposta, pontos } ***
+        roundDetails[tema.tema_nome][jId] = {
+            resposta: participacao?.resposta || '',
+            pontos: participacao?.pontos || 0
+        };
       }
     }
 
     // Calcula os totais
     const totais = await computeTotaisSala({ salaId });
 
-    return { roundId, roundScore, totais };
+    // *** MODIFICADO: Retorna roundDetails ***
+    return { roundId, roundDetails, totais };
+    
   } catch (err) {
     console.error(`[getRoundResults] Erro ao buscar resultados da rodada ${roundId}:`, err);
-    return { roundId, roundScore: {}, totais: await computeTotaisSala({ salaId }) };
+    // *** MODIFICADO: Retorna roundDetails vazio ***
+    return { roundId, roundDetails: {}, totais: await computeTotaisSala({ salaId }) };
   }
 }
+/**
+ * *** PASSO 4 - MODIFICAÇÃO 2 TERMINA AQUI ***
+ */
 
 
 /* =========================
