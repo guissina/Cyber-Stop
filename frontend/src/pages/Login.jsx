@@ -4,6 +4,8 @@ import api from '../lib/api'
 import { useNavigate } from 'react-router-dom'
 import FaultyTerminalR3F from '../components/FaultyTerminalR3F'
 import { refreshSocketAuth } from '../lib/socket';
+import GlitchText from '../components/GlitchText'
+import CyberLogo from '../components/CyberLogo'
 
 export default function Login() {
   const [isLogin, setIsLogin] = useState(true)
@@ -57,7 +59,13 @@ export default function Login() {
     // 1. Container com perspectiva
     <div className="min-h-screen flex items-center justify-center bg-bg-primary text-white p-4 font-cyber [perspective:1000px]">
       <FaultyTerminalR3F className="absolute inset-0 w-full h-full z-0" />
-        <div className="absolute z-10 max-w-md mx-auto space-y-4 text-white p-4 font-cyber [perspective:1000px]">
+        <div className="absolute z-10 flex flex-col items-center justify-center max-w-md mx-auto space-y-4 text-white p-4 font-cyber [perspective:1000px]">
+          
+          <div className="w-full max-w-xs h-48 justify-center">
+            <CyberLogo />
+          </div>
+          
+          <GlitchText text="C://STOP_" fontSize={3} color="rgb(57, 255, 20)" fontWeight="bold" textAlign="center" font="https://fonts.gstatic.com/s/orbitron/v35/yMJMMIlzdpvBhQQL_SC3X9yhF25-T1ny_Cmxpg.ttf" />
           {/* 2. Formulário com 3D-style e augmented-ui */}
           <form 
             onSubmit={submit} 

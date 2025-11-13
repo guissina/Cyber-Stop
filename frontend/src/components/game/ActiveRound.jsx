@@ -150,7 +150,7 @@ export default function ActiveRound({
                        transition-all 
                        [transform:translateZ(0px)]
                        hover:scale-105 hover:[transform:translateZ(10px)] active:[transform:translateZ(2px)]
-                       relative z-10"
+                       relative z-10 cursor-target"
             onClick={onStop}
             disabled={!rodadaId || isLocked || timeLeft === 0}
             data-augmented-ui="tl-scoop tr-scoop br-scoop bl-scoop"

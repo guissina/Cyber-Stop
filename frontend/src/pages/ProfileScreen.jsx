@@ -5,6 +5,7 @@ import api from '../lib/api';
 // (CORRIGIDO) Importa 'avatarList' (objetos) e 'DEFAULT_AVATAR' (que é o primeiro objeto da lista)
 import { avatarList, DEFAULT_AVATAR } from '../lib/avatarList'; 
 import GlitchText from '../components/GlitchText'; 
+import MatrixRain from '../components/MatrixRain';
 
 function ProfileScreen() {
   const [profileData, setProfileData] = useState({
@@ -82,7 +83,8 @@ function ProfileScreen() {
 
   return (
     <div className="flex justify-center items-center min-h-screen p-4 sm:p-8 text-white">
-      <div className="w-full max-w-md p-6 sm:p-8 bg-gray-800 rounded-lg shadow-2xl border border-gray-700">
+      <MatrixRain className='z-0' />
+      <div className="w-full max-w-md p-6 sm:p-8 bg-gray-800 rounded-lg shadow-2xl border border-gray-700 z-10 opacity-95">
         
         <GlitchText text="Meu perfil" fontSize={2} color="rgb(57, 255, 20)" fontWeight="bold" textAlign="center" font="https://fonts.gstatic.com/s/orbitron/v35/yMJMMIlzdpvBhQQL_SC3X9yhF25-T1ny_Cmxpg.ttf" />
         
@@ -101,7 +103,7 @@ function ProfileScreen() {
           <button
             onClick={handleRandomAvatar}
             disabled={isSaving || loading}
-            className="mt-4 p-2 rounded-full text-blue-400 hover:text-white hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 transition-all duration-200 disabled:text-gray-600 disabled:bg-transparent disabled:cursor-not-allowed"
+            className="mt-4 p-2 rounded-full cursor-target text-blue-400 hover:text-white hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 transition-all duration-200 disabled:text-gray-600 disabled:bg-transparent disabled:cursor-not-allowed"
             aria-label="Sortear novo avatar" 
           >
             <svg 
@@ -126,7 +128,7 @@ function ProfileScreen() {
             <label className="block text-sm font-medium text-gray-400 uppercase tracking-wider">
               Nome de Usuário
             </label>
-            <div className="mt-1 block w-full rounded-md border-gray-600 bg-gray-900 p-3 shadow-sm sm:text-lg text-white font-mono cursor-default">
+            <div className="mt-1 block w-full rounded-md border-gray-600 bg-gray-900 p-3 shadow-sm sm:text-lg text-white font-mono cursor-target">
               {profileData.nome_de_usuario || (loading ? 'Carregando...' : 'N/A')}
             </div>
           </div>
@@ -134,7 +136,7 @@ function ProfileScreen() {
             <label className="block text-sm font-medium text-gray-400 uppercase tracking-wider">
               Email
             </label>
-            <div className="mt-1 block w-full rounded-md border-gray-600 bg-gray-900 p-3 text-gray-400 shadow-sm sm:text-lg font-mono cursor-default">
+            <div className="mt-1 block w-full rounded-md border-gray-600 bg-gray-900 p-3 text-gray-400 shadow-sm sm:text-lg font-mono cursor-target">
               {profileData.email || (loading ? 'Carregando...' : 'N/A')}
             </div>
           </div>

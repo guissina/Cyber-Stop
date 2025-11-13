@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, RefreshCw, Globe, Users } from 'lucide-react'
 import Ranking from '../components/Ranking'
 import MatrixRain from '../components/MatrixRain'
+import CyberLogo from '../components/CyberLogo'
 
 export default function RankingScreen() {
   const navigate = useNavigate()
@@ -19,6 +20,7 @@ export default function RankingScreen() {
         className="fixed inset-0 z-0"
       />
       <div className="max-w-4xl mx-auto z-10 relative">
+        
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
           <button
@@ -30,8 +32,9 @@ export default function RankingScreen() {
             <ArrowLeft size={20} />
             Voltar
           </button>
-
+          <CyberLogo className="mx-auto h-full w-full" />
           <div className="flex items-center gap-4">
+            
             {/* Toggle Global/Sala */}
             {salaId && (
               <div className="flex items-center gap-2 bg-bg-secondary p-1 rounded"

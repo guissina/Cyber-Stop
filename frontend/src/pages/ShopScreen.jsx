@@ -66,7 +66,7 @@ function PackageCard({ pkg, onBuy, isBuying }) {
   return (
     <div 
       className="bg-bg-secondary p-4 border border-secondary/50 rounded-lg shadow-lg cursor-target
-                 flex flex-col justify-between transition-all"
+                 flex flex-col justify-between transition-all hover:scale-[1.02]"
       data-augmented-ui="tl-clip tr-2-clip-x br-clip bl-2-clip-x border"
     >
       <div>
@@ -180,7 +180,7 @@ export default function ShopScreen() {
       await api.post('/shop/buy-item', { item_id: itemId });
       // Sucesso! Atualiza o saldo de moedas
       await fetchData(); // Recarrega tudo para simplicidade
-      alert('Compra realizada com sucesso!');
+      // alert('Compra realizada com sucesso!');
     } catch (err) {
       console.error('Erro ao comprar item:', err);
       setError(err.response?.data?.error || 'Saldo de moedas insuficiente ou falha na transação.');
@@ -234,7 +234,7 @@ export default function ShopScreen() {
       {/* Cabeçalho e Botão Voltar */}
       <header className="flex items-center justify-between mb-6 px-2 z-10">
         <button
-          onClick={() => navigate('/lobby')}
+          onClick={() => navigate('/')}
           className="text-text-muted hover:text-primary transition-colors flex items-center gap-1 text-sm cursor-target"
           title="Voltar ao Lobby"
         >
@@ -285,7 +285,7 @@ export default function ShopScreen() {
           <Loader2 size={40} className="animate-spin text-primary" />
         </div>
       ) : (
-        <div className="w-full max-w-5xl mx-auto">
+        <div className="w-full max-w-5xl mx-auto z-10">
           {/* Aba de Itens (Power-ups) */}
           {tab === 'items' && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
