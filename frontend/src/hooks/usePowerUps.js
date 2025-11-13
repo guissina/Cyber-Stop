@@ -66,7 +66,7 @@ export function usePowerUps(rodadaId, isLocked) {
 
     // Emitir evento para o backend processar o uso
     socket.emit('powerup:use', {
-      powerUpId: powerUp.power_up_id,
+      powerUpId: powerUp.powerUpId,
       targetPlayerId: targetPlayerId,
       targetTemaNome: targetTemaNome
     });
