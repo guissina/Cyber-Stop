@@ -727,9 +727,31 @@ export function initSockets(httpServer) { //
         switch (efeito) {
             case 'BLUR_OPPONENT_SCREEN_5S':
             case 'JUMPSCARE':
-                socket.to(salaId).emit('effect:jumpscare', { attackerId: usuarioJogadorId, duration: 3 });
-                socket.emit('powerup:ack', { codigo: efeito, message: 'Jumpscare enviado! Oponente ficará bloqueado por 3s' });
-                break;
+              const jumpscares = [
+                  { gif: '/jumpscarelist/exo.gif', sound: '/jumpscarelist/exo.mp3' },
+                  { gif: '/jumpscarelist/foxy.gif', sound: '/jumpscarelist/foxy.mp3' },
+                  { gif: '/jumpscarelist/mangle.gif', sound: '/jumpscarelist/mangle.mp3' },
+                  { gif: '/jumpscarelist/puppet.gif', sound: '/jumpscarelist/puppet.mp3' }
+              ];
+
+              // escolhe 1 jumpscare aleatório
+              const random = jumpscares[Math.floor(Math.random() * jumpscares.length)];
+
+              // envia para todos os oponentes (exceto quem usou)
+              socket.to(salaId).emit('effect:jumpscare', {
+                  attackerId: usuarioJogadorId,
+                  image: random.gif,
+                  sound: random.sound,
+                  duration: 3
+              });
+
+              // mensagem de sucesso
+              socket.emit('powerup:ack', {
+                  codigo: efeito,
+                  message: 'Jumpscare enviado!'
+              });
+
+              break;
             case 'SKIP_OWN_CATEGORY':
                 socket.emit('effect:enable_skip', { powerUpId: powerUpId });
                 break;
@@ -887,6 +909,35 @@ export function initSockets(httpServer) { //
                     socket.emit('powerup:error', { message: 'Erro ao ativar desconsideração de palavra do oponente.' });
                 }
                 break;
+                case 'SCREEN_DIRECTION_MOD':
+                  try {
+                    const todosJogadores = await getJogadoresDaSala(salaId);
+                    const oponentesIds = todosJogadores.filter(id => id !== usuarioJogadorId);
+
+                    if (oponentesIds.length === 0) {
+                      socket.emit('powerup:error', { message: 'Não há oponentes na sala para afetar.' });
+                      break;
+                    }
+
+                    // Escolhe alvo (pode vir targetPlayerId ou aleatório)
+                    let targetId = targetPlayerId ? Number(targetPlayerId) : oponentesIds[Math.floor(Math.random() * oponentesIds.length)];
+                    if (!oponentesIds.includes(targetId)) targetId = oponentesIds[0];
+
+                    const targetSocketId = await getSocketIdByPlayerId(targetId);
+                    if (targetSocketId) {
+                      // envia evento para o front do alvo
+                      io.to(targetSocketId).emit('effect:invert_screen', { duration: 5000, attackerId: usuarioJogadorId });
+                      socket.emit('powerup:ack', { codigo: efeito, message: 'Tela do oponente foi virada por alguns segundos!' });
+                      console.log(`[SCREEN_DIRECTION_MOD] Jogador ${usuarioJogadorId} alterou a direção da tela do jogador ${targetId}`);
+                    } else {
+                      socket.emit('powerup:error', { message: 'Oponente não está conectado.' });
+                    }
+                  } catch (err) {
+                    console.error('[SCREEN_DIRECTION_MOD] Erro:', err);
+                    socket.emit('powerup:error', { message: 'Erro ao aplicar rotação de tela.' });
+                  }
+                  break;
+
             default:
                 console.warn(`[powerup:use] Efeito desconhecido: ${efeito}`);
                 socket.emit('powerup:error', { message: `Efeito não implementado: ${efeito}` });
