@@ -1,15 +1,16 @@
-// fronted/src/components/Header.jsx
-import { useState, useEffect } from 'react'; // (NOVO) Importar useState e useEffect
+// frontend/src/components/Header.jsx
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Gem, User, LogOut, Store } from 'lucide-react';
+import { Gem, User, LogOut } from 'lucide-react';
 import { avatarList } from '../lib/avatarList';
-import api from '../lib/api'; // (NOVO) Importar a API
-import socket from '../lib/socket'; // (NOVO) Importar o socket
+import api from '../lib/api';
+import socket from '../lib/socket';
 import { useExitConfirmation } from '../hooks/useExitConfirmation';
 import ExitConfirmationModal from './ExitConfirmationModal';
 
-// (NOVO) Hook simples para pegar dados do usuário
-// Como não há Contexto, cada componente que precisa do usuário busca por si
+/**
+ * Hook simples para pegar dados do usuário (sem Context)
+ */
 function useUserData() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -20,158 +21,188 @@ function useUserData() {
         const { data } = await api.get('/auth/me');
         setUser(data.jogador);
       } catch (error) {
-        console.error("Erro ao buscar dados do usuário:", error);
-        // (Opcional) deslogar se o token for inválido
-        // localStorage.removeItem('token');
-        // window.location.href = '/'; 
+        console.error('Erro ao buscar dados do usuário:', error);
       } finally {
         setLoading(false);
       }
     };
-    
-    // Só busca se houver um token
+
     if (localStorage.getItem('token')) {
-        fetchUser();
+      fetchUser();
     } else {
-        setLoading(false);
+      setLoading(false);
     }
   }, []);
 
   return { user, loading };
 }
 
-
 export default function Header() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, loading: userLoading } = useUserData(); // (NOVO) Busca dados do usuário
-  const [moedas, setMoedas] = useState(0); // (NOVO) Estado local para moedas
+  const { user, loading: userLoading } = useUserData();
+  const [moedas, setMoedas] = useState(0);
 
-  // Detecta se está em uma sala ou partida
+  // Detecta rota de sala/jogo
   const isWaitingRoom = location.pathname.startsWith('/waiting/');
   const isGameScreen = location.pathname.startsWith('/game/');
-  
-  // Extrai o salaId da URL diretamente (ex: /waiting/123 ou /game/123)
   let salaId = null;
   if (isWaitingRoom || isGameScreen) {
     const match = location.pathname.match(/\/(?:waiting|game)\/(\d+)/);
     salaId = match ? match[1] : null;
   }
-  
-  const matchStarted = isGameScreen; // Se está na tela de jogo, a partida já começou
+  const matchStarted = isGameScreen;
 
-  // Hook de confirmação de saída - só ativo se estiver em sala/partida
-  const { 
-    showModal, 
-    confirmExit, 
-    cancelExit, 
-    handleExitClick,
-    exitConfirmed
+  const {
+    showModal,
+    confirmExit,
+    cancelExit,
+    handleExitClick
   } = useExitConfirmation(salaId, matchStarted);
 
-  // (NOVO) Efeito para buscar e atualizar o saldo de moedas
+  // --- fetchMoedas agora disponível no escopo do componente ---
+  const fetchMoedas = async () => {
+    try {
+      const { data } = await api.get('/shop/inventory');
+      setMoedas(data?.moedas || 0);
+    } catch (err) {
+      console.error('Header: Erro ao buscar saldo de moedas:', err);
+      setMoedas(0);
+    }
+  };
+
+  // --- Sincronização de moedas: API, socket, CustomEvent and localStorage fallback ---
   useEffect(() => {
-    // 1. Função para buscar o saldo
-    const fetchMoedas = async () => {
+    let mounted = true;
+
+    // inicial
+    fetchMoedas();
+
+    // Handler para CustomEvent dispatched pela ShopScreen:
+    const onUpdateCoinsEvent = (ev) => {
       try {
-        const { data } = await api.get('/shop/inventory');
-        setMoedas(data?.moedas || 0);
-      } catch (error) {
-        console.error("Header: Erro ao buscar saldo de moedas:", error);
-        setMoedas(0);
+        const detail = ev?.detail;
+        if (detail && typeof detail.moedas === 'number') {
+          setMoedas(detail.moedas);
+        } else {
+          fetchMoedas();
+        }
+      } catch (err) {
+        console.error('Header: erro ao processar updateCoins event', err);
+        fetchMoedas();
       }
     };
 
-    // 2. Busca o saldo inicial
-    fetchMoedas();
-
-    // 3. Ouve por atualizações (quando usa power-up)
-    const onInventoryUpdate = () => {
-      console.log("Header: 'inventory:updated' recebido. Buscando novo saldo.");
-      fetchMoedas();
+    // Handler para socket event name 'inventory:updated' (payload pode conter moedas)
+    const onInventoryUpdateSocket = (payload) => {
+      try {
+        if (payload && typeof payload.moedas === 'number') {
+          setMoedas(payload.moedas);
+        } else {
+          fetchMoedas();
+        }
+      } catch (err) {
+        console.error('Header: erro no socket inventory:updated handler', err);
+        fetchMoedas();
+      }
     };
-    
-    socket.on('inventory:updated', onInventoryUpdate);
 
-    // 4. Limpa o listener ao sair
+    // Handler para localStorage (útil para múltiplas abas). Note: storage só dispara em outras abas.
+    const onStorage = (ev) => {
+      try {
+        if (ev.key === 'userCoins' && ev.newValue != null) {
+          const n = Number(ev.newValue);
+          if (!Number.isNaN(n)) {
+            setMoedas(n);
+          } else {
+            fetchMoedas();
+          }
+        }
+      } catch (err) {
+        console.error('Header: erro onStorage', err);
+        fetchMoedas();
+      }
+    };
+
+    window.addEventListener('updateCoins', onUpdateCoinsEvent);
+    window.addEventListener('storage', onStorage);
+    socket.on('inventory:updated', onInventoryUpdateSocket);
+
     return () => {
-      socket.off('inventory:updated', onInventoryUpdate);
+      mounted = false;
+      window.removeEventListener('updateCoins', onUpdateCoinsEvent);
+      window.removeEventListener('storage', onStorage);
+      socket.off('inventory:updated', onInventoryUpdateSocket);
     };
-  }, []); // Roda apenas uma vez
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // monta apenas uma vez
 
-
-  // Função de logout que será interceptada se estiver em sala/partida
-  const performLogout = () => {
-    // Desconecta o socket primeiro
-    if (socket.connected) {
-      socket.disconnect();
+  // --- NOVO: sempre que a rota mudar para a Home ('/'), revalida o saldo ---
+  useEffect(() => {
+    // quando navegar *para* a home queremos garantir saldo atualizado
+    if (location.pathname === '/') {
+      fetchMoedas();
     }
-    
-    // Limpa todos os dados de autenticação
+    // se quiser que qualquer mudança de rota revalide, mude a condição acima
+  }, [location.pathname]); // roda sempre que a rota muda
+
+  // Logout (com interceptação se o usuário estiver em sala/partida)
+  const performLogout = () => {
+    try {
+      if (socket && socket.connected) socket.disconnect();
+    } catch (err) {
+      console.warn('Erro ao desconectar socket:', err);
+    }
+
     localStorage.removeItem('token');
     localStorage.removeItem('meuJogadorId');
     sessionStorage.removeItem('meuJogadorId');
-    
-    // Remove o header de autorização da API
-    delete api.defaults.headers.common['Authorization'];
-    
-    // Navega diretamente para a página de login (replace: true evita voltar com back button)
+    delete api.defaults.headers.common?.Authorization;
+
     navigate('/login', { replace: true });
   };
 
-  // Wrapper para o handleLogout que intercepta se estiver em sala/partida
   const handleLogout = (e) => {
-    // Previne qualquer ação padrão
     if (e) {
       e.preventDefault();
       e.stopPropagation();
     }
-    
-    // Se estiver em sala/partida, intercepta e mostra o modal
-    // Caso contrário, executa o logout diretamente
+
     if (salaId) {
-      // Se há salaId, sempre intercepta usando o hook
-      handleExitClick(() => {
-        performLogout();
-      });
+      handleExitClick(() => performLogout());
     } else {
-      // Se não há salaId, executa o logout diretamente
       performLogout();
     }
   };
 
-  // Wrapper para confirmExit - o hook já executa a ação pendente (performLogout) após sair da sala
   const handleConfirmExit = async () => {
-    // O confirmExit já vai executar a ação pendente (performLogout) após sair da sala
-    // Não precisamos chamar performLogout novamente aqui
     await confirmExit();
   };
 
-  // Enquanto busca o usuário, pode mostrar um estado simplificado
+  // Loading do usuário
   if (userLoading) {
     return (
       <header className="absolute top-0 left-0 right-0 z-50 flex items-center justify-between p-4 bg-black/30 backdrop-blur-sm border-b border-primary/20">
-         <Link to="/" className="text-2xl font-bold text-primary hover:text-accent transition-colors font-cyber" title="Voltar à Tela Inicial">
-            CYBER-STOP
-         </Link>
-         {/* Não mostra nada enquanto carrega */}
+        <Link to="/" className="text-2xl font-bold text-primary hover:text-accent transition-colors font-cyber" title="Voltar à Tela Inicial">
+          CYBER-STOP
+        </Link>
+        {/* enquanto carrega, não mostra o bloco direito */}
       </header>
     );
   }
-  
-  // Se não houver usuário (ex: tela de login), não mostra nada
-  if (!user) {
-    return null;
-  }
 
-  // (ATUALIZADO) Pega o avatar do usuário
-  const userAvatar = avatarList.find(avatar => avatar.nome === user?.avatar_nome) || avatarList[0];
+  // se não está logado, não renderiza header
+  if (!user) return null;
+
+  const userAvatar = avatarList.find(a => a.nome === user?.avatar_nome) || avatarList[0];
+
+  // Ocultar moedas se estiver na rota /shop ou suas subrotas
+  const isOnShopScreen = location.pathname.startsWith('/shop');
 
   return (
     <>
-      {/* Modal de confirmação de saída - só aparece se estiver em sala/partida */}
       {salaId && (
-        <ExitConfirmationModal 
+        <ExitConfirmationModal
           isOpen={showModal}
           onConfirm={handleConfirmExit}
           onCancel={cancelExit}
@@ -179,54 +210,54 @@ export default function Header() {
       )}
 
       <header className="absolute top-0 left-0 right-0 z-50 flex items-center justify-between p-4 bg-black/30 backdrop-blur-sm border-b border-primary/20">
-        {/* Logo ou Nome do Jogo */}
-        <Link to="/" className="text-2xl font-bold text-primary hover:text-accent transition-colors font-cyber cursor-target" title="Voltar à Tela Inicial">
+        {/* Logo / nome do jogo */}
+        <Link
+          to="/"
+          className="text-2xl font-bold text-primary hover:text-accent transition-colors font-cyber cursor-target"
+          title="Voltar à Tela Inicial"
+        >
           CYBER-STOP
         </Link>
 
-      {/* Informações do Usuário e Moedas */}
-      <div className="flex items-center gap-4">
-        {/* Link da Loja */}
-        <button
-          onClick={() => navigate('/shop')}
-          className="text-text-muted hover:text-secondary transition-colors flex items-center gap-2 cursor-target"
-          title="Loja"
-        >
-          <Store size={20} />
-          <span className="hidden md:inline">Loja</span>
-        </button>
+        {/* Right side: moedas, avatar e logout */}
+        <div className="flex items-center gap-4">
+          {/* Saldo de Moedas: escondido em /shop */}
+          {!isOnShopScreen && (
+            <div
+              className="bg-bg-secondary border border-warning/50 rounded px-3 py-1.5 flex items-center gap-2 cursor-target"
+              title="Seu Saldo"
+              onClick={() => navigate('/shop')}
+            >
+              <span className="text-lg font-semibold text-warning tabular-nums">
+                {moedas.toLocaleString('pt-BR')}
+              </span>
+              <Gem size={18} className="text-warning" />
+            </div>
+          )}
 
-        {/* Saldo de Moedas (ATUALIZADO) */}
-        <div className="bg-bg-secondary border border-warning/50 rounded px-3 py-1.5 flex items-center gap-2" title="Seu Saldo">
-          <span className="text-lg font-semibold text-warning">{moedas}</span>
-          <Gem size={18} className="text-warning" />
-        </div>
-
-        {/* Perfil do Usuário */}
-        <div className="flex items-center gap-2">
-          <img
-            src={userAvatar.src}
-            alt="Avatar"
-            className="h-10 w-10 rounded-full border-2 border-primary/50 object-cover"
-          />
-          <div className="hidden md:flex flex-col text-left">
-            <span className="text-sm font-semibold text-white">{user?.nome_de_usuario || 'Jogador'}</span>
-            <Link to="/profile" className="text-xs text-text-muted hover:text-primary cursor-target">
-              Ver Perfil
-            </Link>
+          {/* Perfil do Usuário */}
+          <div className="flex items-center gap-2">
+            <img
+              src={userAvatar.src}
+              alt="Avatar"
+              className="h-10 w-10 rounded-full border-2 border-primary/50 object-cover"
+            />
+            <div className="hidden md:flex flex-col text-left">
+              <span className="text-sm font-semibold text-white">{user?.nome_de_usuario || 'Jogador'}</span>
+              <Link to="/profile" className="text-xs text-text-muted hover:text-primary cursor-target">Ver Perfil</Link>
+            </div>
           </div>
-        </div>
 
-        {/* Botão de Logout */}
-        <button
-          onClick={handleLogout}
-          className="bg-red-600/50 hover:bg-red-500/80 text-white p-2 rounded-lg transition-colors cursor-target"
-          title="Sair"
-        >
-          <LogOut size={20} />
-        </button>
-      </div>
-    </header>
+          {/* Botão de Logout */}
+          <button
+            onClick={handleLogout}
+            className="bg-red-600/50 hover:bg-red-500/80 text-white p-2 rounded-lg transition-colors cursor-target"
+            title="Sair"
+          >
+            <LogOut size={20} />
+          </button>
+        </div>
+      </header>
     </>
   );
 }
