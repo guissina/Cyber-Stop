@@ -96,7 +96,8 @@ export default function GameScreen() {
     fetchInventory 
   } = usePowerUps(
     rodadaId, 
-    isLocked
+    isLocked,
+    salaId // <-- CORREÇÃO APLICADA AQUI
   );
 
   // 4. NOVO EFFECT: Lida com o 'round:stopping'

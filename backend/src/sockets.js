@@ -653,33 +653,46 @@ export function initSockets(httpServer) { //
 });
 
 
-    socket.on('powerup:use', async ({ powerUpId, targetPlayerId = null, targetTemaNome = null }) => {
-    const salaId = socket.data.salaId;
+    // ==================================================================
+    // ===               MANIPULADOR DE USO DE POWER-UP               ===
+    // ==================================================================
+    socket.on('powerup:use', async ({ powerUpId, targetPlayerId = null, targetTemaNome = null, salaId: salaIdFromClient = null }) => {
+    
+    // --- INÍCIO DA CORREÇÃO ---
+    // 1. Definição das variáveis no escopo correto
+    const salaId = socket.data.salaId || salaIdFromClient; // Garante que temos a sala
     const usuarioJogadorId = socket.data.jogador_id;
-    const currentRoundId = roomTimers.get(salaId)?.roundId;
+    
+    // 2. Definição de currentRoundId (A CAUSA DO SEU ERRO)
+    // Esta linha estava faltando ou no lugar errado no seu arquivo local
+    const currentRoundId = roomTimers.get(salaId)?.roundId; 
+    // --- FIM DA CORREÇÃO ---
+
 
     if (!usuarioJogadorId || !salaId || !powerUpId) {
         socket.emit('powerup:error', { message: 'Faltando parâmetros para usar power-up.' });
         return;
     }
+    
+    // Agora esta verificação funciona, pois currentRoundId está definido
     if (!currentRoundId) {
         socket.emit('powerup:error', { message: 'Não é possível usar power-ups fora de uma rodada ativa.' });
         return;
     }
 
     try {
-        // --- INÍCIO DA CORREÇÃO ---
+        // --- INÍCIO DA VERIFICAÇÃO/DECREMENTO ---
         // Busca o item na tabela 'inventario' e faz join com 'item' para pegar o código
         const { data: itemInventario, error: checkError } = await supa
-            .from('inventario') // <-- CORREÇÃO: Tabela 'inventario'
+            .from('inventario') // Tabela 'inventario'
             .select(`
-                inventario_id,  // <-- CORREÇÃO: PK da tabela 'inventario'
-                qtde,           // <-- CORREÇÃO: Coluna 'qtde'
-                item ( codigo_identificador ) // <-- CORREÇÃO: Join na tabela 'item'
+                inventario_id,  // PK da tabela 'inventario'
+                qtde,           // Coluna 'qtde'
+                item ( codigo_identificador ) // Join na tabela 'item'
             `)
             .eq('jogador_id', usuarioJogadorId)
-            .eq('item_id', powerUpId) // <-- CORREÇÃO: 'powerUpId' (do frontend) é o 'item_id' (do DB)
-            .maybeSingle(); // Mantém o maybeSingle
+            .eq('item_id', powerUpId) // 'powerUpId' (do frontend) é o 'item_id' (do DB)
+            .maybeSingle(); 
 
         if (checkError && checkError.code !== 'PGRST116') { throw checkError; }
 
@@ -690,9 +703,9 @@ export function initSockets(httpServer) { //
 
         const novaQuantidade = itemInventario.qtde - 1;
         const { error: decrementError } = await supa
-            .from('inventario') // <-- CORREÇÃO: Tabela 'inventario'
-            .update({ qtde: novaQuantidade }) // <-- CORREÇÃO: Coluna 'qtde'
-            .eq('inventario_id', itemInventario.inventario_id); // <-- CORREÇÃO: PK correta
+            .from('inventario') // Tabela 'inventario'
+            .update({ qtde: novaQuantidade }) // Coluna 'qtde'
+            .eq('inventario_id', itemInventario.inventario_id); // PK correta
 
         if (decrementError) { throw decrementError; }
 
@@ -706,7 +719,7 @@ export function initSockets(httpServer) { //
             return;
         }
 
-        const efeito = itemInventario.item.codigo_identificador; // <-- CORREÇÃO: Caminho do objeto
+        const efeito = itemInventario.item.codigo_identificador; // Caminho do objeto
         // --- FIM DA CORREÇÃO ---
 
         console.log(`[powerup:use] Sucesso: Jogador ${usuarioJogadorId} usou ${efeito} na sala ${salaId}, rodada ${currentRoundId}`);
