@@ -60,19 +60,14 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-bg-primary text-white p-4 font-cyber [perspective:1000px]">
       <FaultyTerminalR3F className="absolute inset-0 w-full h-full z-0" />
         <div className="absolute z-10 flex flex-col items-center justify-center max-w-md mx-auto space-y-4 text-white p-4 font-cyber [perspective:1000px]">
-          
-          <div className="w-full max-w-xs h-48 justify-center">
-            <CyberLogo />
-          </div>
-          
-          <GlitchText text="C://STOP_" fontSize={3} color="rgb(57, 255, 20)" fontWeight="bold" textAlign="center" font="https://fonts.gstatic.com/s/orbitron/v35/yMJMMIlzdpvBhQQL_SC3X9yhF25-T1ny_Cmxpg.ttf" />
-          {/* 2. Formulário com 3D-style e augmented-ui */}
           <form 
             onSubmit={submit} 
             className="w-full max-w-md bg-bg-secondary p-6 transition-transform duration-500 [transform-style:preserve-3d] hover:[transform:rotateY(4deg)]"
             data-augmented-ui="tl-clip tr-clip br-clip bl-clip border"
           >
             {/* 3. Filhos com translateZ para "flutuar" */}
+            <GlitchText text="C://STOP_" fontSize={3} color="rgb(57, 255, 20)" fontWeight="bold" textAlign="center" font="https://fonts.gstatic.com/s/orbitron/v35/yMJMMIlzdpvBhQQL_SC3X9yhF25-T1ny_Cmxpg.ttf" />
+
             <h2 className="text-2xl font-bold mb-4 text-text-header [transform:translateZ(20px)]">
               {isLogin ? 'Conectar ao Grid' : 'Criar Identidade'}
             </h2>

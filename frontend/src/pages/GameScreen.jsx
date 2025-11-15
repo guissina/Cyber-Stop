@@ -1,16 +1,16 @@
 // src/pages/GameScreen.jsx
 import { useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useEffect } from 'react'; // <-- IMPORTAR useEffect
+import { useEffect } from 'react';
 
 // Nossos novos Hooks
 import { useGameSocket } from '../hooks/useGameSocket';
 import { useGameInput } from '../hooks/useGameInput';
 import { usePowerUps } from '../hooks/usePowerUps';
 import { useExitConfirmation } from '../hooks/useExitConfirmation';
-import socket from '../lib/socket';
+import { useScreenRotation } from '../hooks/useScreenRotation';
 
-// Nossos novos Componentes de UI
+// Nossos Componentes de UI
 import JumpscareOverlay from '../components/game/JumpscareOverlay';
 import MatchEndScreen from '../components/game/MatchEndScreen';
 import WaitingForRound from '../components/game/WaitingForRound';
@@ -32,20 +32,24 @@ export default function GameScreen() {
   );
 
   // --- HOOKS DE LÓGICA ---
-  
+
   // 1. Hook de Socket: Gerencia o estado principal do jogo (CHAMADO PRIMEIRO)
+  // usa a instância de socket que o hook retorna (NÃO importe socket diretamente)
   const { 
     socket, 
     gameState, 
     effectsState 
-  } = useGameSocket(salaId); // Não precisa mais da callback
-  
+  } = useGameSocket(salaId);
+
+  // Hook de rotação de tela (chame ANTES de usar applyRandomRotation nos effects)
+  const { applyRandomRotation } = useScreenRotation();
+
   // Desestrutura o estado para passar para os outros hooks
   const { rodadaId, isLocked, finalizado, totais, vencedor, roundResults } = gameState;
   const { activeSkipPowerUpId, setActiveSkipPowerUpId, activeSkipOpponentPowerUpId, setActiveSkipOpponentPowerUpId } = effectsState;
 
-  // Hook de confirmação de saída - partida começou se há rodadaId (mesmo que aguardando primeira rodada, já está na tela de jogo)
-  const matchStarted = true; // Se está na GameScreen, a partida já começou
+  // Hook de confirmação de saída - partida começou se está na GameScreen
+  const matchStarted = true;
   const { 
     showModal, 
     confirmExit, 
@@ -66,27 +70,41 @@ export default function GameScreen() {
     handleCategoryDisregarded,
     onStop, 
     handleSkipCategory,
-    enviarRespostas // Pega a função para o novo useEffect
+    enviarRespostas
   } = useGameInput(
-    gameState, // Passa o objeto de estado inteiro
+    gameState,
     salaId, 
     meuJogadorId
   );
 
-  // Conecta o evento de categoria desconsiderada do socket ao handler
+  // Conecta o evento de categoria desconsiderada do socket ao handler local
   useEffect(() => {
+    if (!socket) return;
     const handler = (data) => {
       console.log('GameScreen recebeu effect:category_disregarded:', data);
+      // data.temaId esperado
       handleCategoryDisregarded(data.temaId);
     };
-    
-    // Adiciona listener adicional no GameScreen para conectar ao handler local
     socket.on('effect:category_disregarded', handler);
-    
     return () => {
       socket.off('effect:category_disregarded', handler);
     };
-  }, [handleCategoryDisregarded]);
+  }, [socket, handleCategoryDisregarded]);
+
+  // Listener para o power-up de inverter tela emitido pelo backend
+  useEffect(() => {
+    if (!socket) return;
+    const handler = (data) => {
+      console.log('[SOCKET] effect:invert_screen recebido ->', data);
+      // backend envia duration em ms (5000), mas aceitamos fallback
+      const durationMs = typeof data?.duration === 'number' ? data.duration : 5000;
+      applyRandomRotation(durationMs);
+    };
+    socket.on('effect:invert_screen', handler);
+    return () => {
+      socket.off('effect:invert_screen', handler);
+    };
+  }, [socket, applyRandomRotation]);
 
   // 3. Hook de Power-ups:
   const { 
@@ -96,37 +114,31 @@ export default function GameScreen() {
     fetchInventory 
   } = usePowerUps(
     rodadaId, 
-    isLocked
+    isLocked,
+    salaId
   );
 
-  // 4. NOVO EFFECT: Lida com o 'round:stopping'
-  // Este effect observa a mudança em 'isLocked'. 
-  // Quando 'isLocked' fica 'true' E uma rodada estava ativa (rodadaId existe),
-  // ele dispara o 'enviarRespostas' que foi acionado pelo 'round:stopping'.
+  // 4. NOVO EFFECT: Lida com o 'round:stopping' (envia respostas quando a rodada é parada)
   useEffect(() => {
-    // Só roda se 'isLocked' for true, e se uma rodada estava em andamento
     if (isLocked && rodadaId && !finalizado) {
       console.log("GameScreen detectou 'isLocked=true' (parada de rodada), enviando respostas...");
-      // Envia as respostas da rodada atual, ignorando as puladas
       enviarRespostas(rodadaId, skippedCategories);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLocked, rodadaId, finalizado]); // Depende de isLocked e rodadaId
+  }, [isLocked, rodadaId, finalizado]);
 
-
-  // --- LÓGICA DE INTERLIGAÇÃO (Mesma de antes) ---
+  // --- LÓGICA DE INTERLIGAÇÃO ---
 
   const onSkipCategory = (temaId) => {
-    handleSkipCategory(temaId); // Do hook de input
-    setActiveSkipPowerUpId(null); // Do hook de socket/effects
+    handleSkipCategory(temaId);
+    setActiveSkipPowerUpId(null);
   };
   
   const onSkipOpponentCategory = (temaNome) => {
-    // Encontra o powerup ativo e usa ele com o tema escolhido
     const powerUp = inventario.find(p => p.power_up_id === activeSkipOpponentPowerUpId);
     if (powerUp) {
-      handleUsePowerUp(powerUp, temaNome); // Passa o nome do tema
-      setActiveSkipOpponentPowerUpId(null); // Desativa o modo de escolha
+      handleUsePowerUp(powerUp, temaNome);
+      setActiveSkipOpponentPowerUpId(null);
     }
   };
 
@@ -140,11 +152,14 @@ export default function GameScreen() {
     if (powerUp.code === 'REVEAL_OPPONENT_ANSWER' && effectsState.revealPending) {
       alert("Você já ativou a revelação para esta rodada."); return;
     }
-    handleUsePowerUp(powerUp); // Do hook de power-ups
+
+    // IMPORTANTE: não aplicamos a rotação localmente aqui.
+    // Enviamos ao backend através do handleUsePowerUp, que faz o emit 'powerup:use'.
+    // O backend escolhe o alvo e emite 'effect:invert_screen' para o jogador alvo.
+    handleUsePowerUp(powerUp);
   };
 
-
-  // --- RENDERIZAÇÃO (Mesma de antes) ---
+  // --- RENDERIZAÇÃO ---
   return (
     <>
       {/* Bloqueador de navegação */}
@@ -165,19 +180,14 @@ export default function GameScreen() {
         onCancel={cancelExit}
       />
       
-      {/* <MatrixRain
-        color="#ff0000ff"
-        fontSize={12}
-        className="fixed inset-0 z-0"
-      /> */}
       <div className="absolute inset-0 w-full h-full z-0 pointer-events-none opacity-70">
         <PixelBlast
-          
           density={0.5}
           speed={0.9}
           className="w-full h-full" 
         />
       </div>
+
       {/* 1. Overlay de Jumpscare */}
       <AnimatePresence>
         {effectsState.showJumpscare && (
@@ -192,30 +202,24 @@ export default function GameScreen() {
 
       {/* 2. Conteúdo Principal da Página */}
       {finalizado ? (
-        // Tela de Fim de Jogo
         <MatchEndScreen
           totais={totais}
           vencedor={vencedor}
           meuJogadorId={meuJogadorId}
           salaId={salaId}
-          onReFetchInventory={fetchInventory} // Passa a função para rebuscar moedas
+          onReFetchInventory={fetchInventory}
         /> 
-        ) : roundResults ? ( 
+      ) : roundResults ? ( 
         <RoundEndScreen
           results={roundResults}
-          temas={gameState.temas} // Passa os temas da rodada anterior
-          jogadores={gameState.jogadores} // Você precisará garantir que 'jogadores' esteja no gameState
+          temas={gameState.temas}
+          jogadores={gameState.jogadores}
           salaId={salaId}
           meuJogadorId={meuJogadorId}
         />
       ) : !rodadaId ? (
-        // Tela de "Aguardando"
-        <WaitingForRound 
-          salaId={salaId}
-          // A prop socket={socket} foi REMOVIDA
-        />
+        <WaitingForRound salaId={salaId} />
       ) : (
-        // Tela de "Jogo Ativo"
         <ActiveRound
           salaId={salaId}
           meuJogadorId={meuJogadorId}

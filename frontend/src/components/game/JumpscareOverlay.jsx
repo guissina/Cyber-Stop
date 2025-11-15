@@ -1,54 +1,138 @@
 // src/components/game/JumpscareOverlay.jsx
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Ghost } from 'lucide-react'; // Importe o ícone se for usar
+import { Ghost } from 'lucide-react';
 
-// --- Componente Jumpscare Overlay ---
-// (Movido de GameScreen.jsx)
-function JumpscareOverlay({ imageUrl, soundUrl, onEnd, duration = 3 }) {
+export default function JumpscareOverlay({
+  imageUrl,
+  soundUrl,
+  onEnd = () => {},
+  // durée fixa de 2s (ignore payload externo)
+  duration = 2
+}) {
+  const audioRef = useRef(null);
+  const timerRef = useRef(null);
+  const onEndRef = useRef(onEnd); // mantenha a referência mais recente do onEnd
+  const [audioBlocked, setAudioBlocked] = useState(false);
+
+  // atualiza a ref sempre que onEnd mudar, sem reiniciar o timer
   useEffect(() => {
-    // Toca o som (se houver)
-    let audio = null;
-    if (soundUrl) {
-      audio = new Audio(soundUrl);
-      audio.play().catch(e => console.error("Erro ao tocar som do jumpscare:", e));
+    onEndRef.current = onEnd;
+  }, [onEnd]);
+
+  useEffect(() => {
+    console.log('[JUMPSCARE OVERLAY] mount', { imageUrl, soundUrl });
+
+    const dur = 2; // força 2 segundos
+
+    // preload da imagem
+    if (imageUrl) {
+      const img = new Image();
+      img.src = imageUrl;
     }
 
-    // Define um timer para esconder o jumpscare
-    const timer = setTimeout(onEnd, duration * 1000); // Mostra por duration segundos
+    // cria e tenta tocar audio
+    if (soundUrl) {
+      try {
+        audioRef.current = new Audio(soundUrl);
+        audioRef.current.preload = 'auto';
+        audioRef.current.volume = 1.0;
+        audioRef.current.play().catch((err) => {
+          console.warn('[JUMPSCARE OVERLAY] autoplay bloqueado:', err);
+          setAudioBlocked(true);
+        });
+      } catch (e) {
+        console.error('[JUMPSCARE OVERLAY] erro ao criar audio:', e);
+      }
+    }
 
-    // Limpeza ao desmontar
+    // limpa timer anterior, se houver
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+
+    // setTimeout que chama a ref (onEndRef.current) - evita depender de onEnd diretamente
+    timerRef.current = window.setTimeout(() => {
+      console.log('[JUMPSCARE OVERLAY] timeout 2s disparado — chamando onEndRef.current()');
+      try {
+        if (audioRef.current) {
+          audioRef.current.pause();
+          audioRef.current.currentTime = 0;
+        }
+      } catch (e) {}
+      // chama a função mais recente armazenada em onEndRef
+      try { onEndRef.current && onEndRef.current(); } catch (e) { console.error('[JUMPSCARE OVERLAY] onEnd erro:', e); }
+    }, dur * 1000);
+
     return () => {
-      clearTimeout(timer);
-      if (audio) {
-        audio.pause();
-        audio.currentTime = 0;
+      console.log('[JUMPSCARE OVERLAY] unmount — limpando timer/audio');
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+      if (audioRef.current) {
+        try { audioRef.current.pause(); audioRef.current.currentTime = 0; } catch (e) {}
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Roda apenas uma vez na montagem
+    // OBS: deliberadamente não incluí `onEnd` nas deps para evitar reloop; só imageUrl/soundUrl reiniciam o effect
+  }, [imageUrl, soundUrl]);
+
+  const tryEnableAudio = async () => {
+    if (!soundUrl) return;
+    if (!audioRef.current) audioRef.current = new Audio(soundUrl);
+    try {
+      await audioRef.current.play();
+      setAudioBlocked(false);
+    } catch (e) {
+      console.warn('[JUMPSCARE OVERLAY] tryEnableAudio falhou:', e);
+    }
+  };
 
   return (
-    <motion.div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 overflow-hidden pointer-events-auto"
-      initial={{ scale: 0.5, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      exit={{ scale: 1.5, opacity: 0 }}
-      transition={{ duration: 0.2 }}
-    >
-      {/* Idealmente, usar uma imagem de props ou uma padrão */}
-      <motion.img
-        // src={imageUrl || '/path/to/default/jumpscare.png'}
-        src="https://www.showmetech.com.br/wp-content/uploads//2020/07/original-1920x1080-1.png" // URL de Exemplo - SUBSTITUA!
-        alt="JUMPSCARE!"
-        className="max-w-[80vw] max-h-[80vh] object-contain"
-        initial={{ scale: 1 }}
-        animate={{ scale: [1, 1.2, 1, 1.1, 1] }} // Efeito de tremor/zoom rápido
-        transition={{ duration: 0.5, times: [0, 0.1, 0.3, 0.4, 0.5] }}
-      />
-       {/* Alternativa com Ícone: <Ghost className="w-64 h-64 text-red-500 animate-ping" /> */}
-    </motion.div>
+    <AnimatePresence>
+      <motion.div
+        key="jumpscare-overlay"
+        className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 overflow-hidden"
+        initial={{ opacity: 0, scale: 0.98 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.12 }}
+        style={{ pointerEvents: 'auto' }}
+      >
+        <motion.div
+          className="relative w-full h-full flex items-center justify-center"
+          initial={{ scale: 0.95 }}
+          animate={{ scale: [1, 1.08, 0.98, 1] }}
+          transition={{ duration: 0.6 }}
+        >
+          {imageUrl ? (
+            <motion.img
+              src={imageUrl}
+              alt="jumpscare"
+              className="w-full h-full object-cover"
+              style={{ imageRendering: 'pixelated' }}
+              initial={{ scale: 1 }}
+              animate={{ scale: [1, 1.04, 0.98, 1] }}
+              transition={{ duration: 0.6 }}
+            />
+          ) : (
+            <div className="flex flex-col items-center justify-center">
+              <Ghost className="w-40 h-40 text-red-500 animate-pulse" />
+            </div>
+          )}
+
+          {audioBlocked && (
+            <button
+              onClick={tryEnableAudio}
+              className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-white/90 text-black py-2 px-4 rounded shadow pointer-events-auto"
+              style={{ zIndex: 101 }}
+            >
+              Ativar som
+            </button>
+          )}
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
   );
 }
-
-export default JumpscareOverlay;

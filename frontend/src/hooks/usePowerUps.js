@@ -3,7 +3,8 @@ import { useState, useEffect } from 'react';
 import api from '../lib/api';
 import socket from '../lib/socket';
 
-export function usePowerUps(rodadaId, isLocked) {
+// Adicione salaId aqui para robustez (Opcional, mas recomendado)
+export function usePowerUps(rodadaId, isLocked, salaId) { 
   const [inventario, setInventario] = useState([]);
   const [loadingInventory, setLoadingInventory] = useState(false);
 
@@ -44,6 +45,12 @@ export function usePowerUps(rodadaId, isLocked) {
       alert("Aguarde a rodada estar ativa.");
       return;
     }
+    
+    // Validação extra recomendada
+    if (!salaId) {
+      alert("Erro: ID da sala não encontrado. Não é possível usar o power-up.");
+      return;
+    }
 
     let targetPlayerId = null;
     let confirmUse = true;
@@ -66,7 +73,11 @@ export function usePowerUps(rodadaId, isLocked) {
 
     // Emitir evento para o backend processar o uso
     socket.emit('powerup:use', {
-      powerUpId: powerUp.powerUpId,
+      // --- A CORREÇÃO PRINCIPAL DO FRONTEND ESTÁ AQUI ---
+      powerUpId: powerUp.power_up_id, // DE: power_Up_Id PARA: power_up_id
+      // -----------------------------------------------------
+      rodadaId: rodadaId, 
+      salaId: salaId, // Enviando salaId explicitamente
       targetPlayerId: targetPlayerId,
       targetTemaNome: targetTemaNome
     });

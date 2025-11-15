@@ -1,5 +1,5 @@
 // src/hooks/useGameSocket.js
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import socket, { joinRoom } from '../lib/socket';
 import api from '../lib/api'; 
 
@@ -27,6 +27,9 @@ export function useGameSocket(salaId) {
   const [activeSkipOpponentPowerUpId, setActiveSkipOpponentPowerUpId] = useState(null);
   const [revealPending, setRevealPending] = useState(false);
   const [revealedAnswer, setRevealedAnswer] = useState(null);
+
+  // JUMPSCARE USE REF 0
+  const jumpscareCooldownRef = useRef(0);
 
 
   useEffect(() => {
@@ -100,10 +103,26 @@ export function useGameSocket(salaId) {
     };
     
     // ... (Listeners de Jumpscare, Skip, etc. continuam iguais)
+    const jumpscareCooldownRef = { current: 0 }; // declará-lo no topo do useEffect (fora do handler) se preferir
     const onJumpscareEffect = ({ attackerId, image, sound, duration }) => {
-        console.log(`effect:jumpscare recebido de ${attackerId}, duração: ${duration}s`);
-        setJumpscareData({ attackerId, image, sound, duration });
+      try {
+        const now = Date.now();
+        const COOLDOWN_MS = 5000; // 5 segundos de proteção local
+        // se já houve jumpscare recentemente para esta sala, ignorar
+        if (jumpscareCooldownRef.current && now < jumpscareCooldownRef.current) {
+          console.log('[useGameSocket] Ignorando jumpscare reemitido (cooldown ativo).');
+          return;
+        }
+        // marca cooldown para evitar reaberturas imediatas
+        jumpscareCooldownRef.current = now + COOLDOWN_MS;
+
+        console.log(`[useGameSocket] effect:jumpscare recebido de ${attackerId} - aplicando (ignorar por ${COOLDOWN_MS}ms).`);
+        // Ajuste: envia duration preferencialmente 2 (mas overlay força 2s de qualquer forma)
+        setJumpscareData({ attackerId, image, sound, duration: 2 });
         setShowJumpscare(true);
+      } catch (e) {
+        console.error('[useGameSocket] onJumpscareEffect erro:', e);
+      }
     };
     const onEnableSkip = ({ powerUpId }) => {
         console.log(`effect:enable_skip recebido para powerUpId: ${powerUpId}`);
@@ -171,6 +190,8 @@ export function useGameSocket(salaId) {
 
     // ... (Lógica de fetchCurrentRound continua igual)
     const fetchCurrentRound = async () => {
+      console.log(`[useGameSocket] Garantindo entrada na sala ${salaId} (fetchCurrentRound)`);
+      joinRoom(salaId);
       try {
         console.log(`[useGameSocket] Buscando rodada atual para sala ${salaId}...`);
         const response = await api.get(`/matches/current/${salaId}`);
