@@ -106,7 +106,7 @@ export function useGameInput(gameState, salaId, meuJogadorId) {
         await enviarRespostas(rid, skippedCategories);
     } catch (e) { console.error("Erro no envio final ao clicar STOP:", e) }
 
-    socket.emit('round:stop', {
+    socket.emit('player_wants_to_stop', {
       salaId: Number(salaId),
       roundId: rid,
       by: meuJogadorId

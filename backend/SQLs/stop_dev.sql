@@ -31,7 +31,7 @@ CREATE TABLE public.consumo_item (
   qtde bigint NOT NULL,
   data_hora_consumo timestamp with time zone NOT NULL DEFAULT (now() AT TIME ZONE 'utc'::text),
   CONSTRAINT consumo_item_pkey PRIMARY KEY (item_participacao_id),
-  CONSTRAINT item_participacao_jogador_sala_rodada_id_fkey FOREIGN KEY (jogador_sala_rodada_id) REFERENCES public.jogador_sala_rodada(jogador_sala_rodada_id),
+  CONSTRAINT item_participacao_jogador_sala_rodada_id_fkey FOREIGN KEY (jogador_sala_rodada_id) REFERENCES public.jogador_sala_rodada_legado(jogador_sala_rodada_id),
   CONSTRAINT item_participacao_item_id_fkey FOREIGN KEY (item_id) REFERENCES public.item(item_id)
 );
 CREATE TABLE public.convite (
@@ -87,11 +87,11 @@ CREATE TABLE public.jogador (
   personagem_nome text,
   CONSTRAINT jogador_pkey PRIMARY KEY (jogador_id)
 );
-CREATE TABLE public.jogador_duplicate (
+CREATE TABLE public.jogador_legado (
   jogador_id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
   nome text NOT NULL UNIQUE,
   user_id uuid NOT NULL,
-  CONSTRAINT jogador_duplicate_pkey PRIMARY KEY (jogador_id),
+  CONSTRAINT jogador_legado_pkey PRIMARY KEY (jogador_id),
   CONSTRAINT jogador_duplicate_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
 );
 CREATE TABLE public.jogador_sala (
@@ -105,13 +105,13 @@ CREATE TABLE public.jogador_sala (
   CONSTRAINT jogador_sala_jogador_id_fkey FOREIGN KEY (jogador_id) REFERENCES public.jogador(jogador_id),
   CONSTRAINT jogador_sala_sala_id_fkey FOREIGN KEY (sala_id) REFERENCES public.sala(sala_id)
 );
-CREATE TABLE public.jogador_sala_rodada (
+CREATE TABLE public.jogador_sala_rodada_legado (
   jogador_sala_rodada_id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
   jogador_sala bigint NOT NULL,
   data_hora_entrada timestamp with time zone NOT NULL DEFAULT (now() AT TIME ZONE 'utc'::text),
   data_hora_saida timestamp with time zone,
   rodada_id bigint NOT NULL,
-  CONSTRAINT jogador_sala_rodada_pkey PRIMARY KEY (jogador_sala_rodada_id),
+  CONSTRAINT jogador_sala_rodada_legado_pkey PRIMARY KEY (jogador_sala_rodada_id),
   CONSTRAINT jogador_sala_rodada_jogador_sala_fkey FOREIGN KEY (jogador_sala) REFERENCES public.jogador_sala(jogador_sala_id),
   CONSTRAINT jogador_sala_rodada_rodada_id_fkey FOREIGN KEY (rodada_id) REFERENCES public.rodada(rodada_id)
 );
@@ -155,7 +155,7 @@ CREATE TABLE public.participacao_rodada_tema (
   status text NOT NULL,
   pontos bigint NOT NULL,
   CONSTRAINT participacao_rodada_tema_pkey PRIMARY KEY (resposta_id),
-  CONSTRAINT participacao_rodada_tema_jogador_sala_rodada_id_fkey FOREIGN KEY (jogador_sala_rodada_id) REFERENCES public.jogador_sala_rodada(jogador_sala_rodada_id),
+  CONSTRAINT participacao_rodada_tema_jogador_sala_rodada_id_fkey FOREIGN KEY (jogador_sala_rodada_id) REFERENCES public.jogador_sala_rodada_legado(jogador_sala_rodada_id),
   CONSTRAINT participacao_rodada_tema_rodada_tema_id_fkey FOREIGN KEY (rodada_tema_id) REFERENCES public.rodada_tema(rodada_tema_id),
   CONSTRAINT participacao_rodada_tema_resposta_base_id_fkey FOREIGN KEY (resposta_base_id) REFERENCES public.resposta_base(resposta_base_id)
 );

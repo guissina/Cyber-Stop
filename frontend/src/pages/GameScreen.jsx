@@ -1,7 +1,7 @@
 // src/pages/GameScreen.jsx
 import { useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 // Nossos novos Hooks
 import { useGameSocket } from '../hooks/useGameSocket';
@@ -18,6 +18,7 @@ import ActiveRound from '../components/game/ActiveRound';
 import RoundEndScreen from '../components/game/RoundEndScreen';
 import ExitConfirmationModal from '../components/ExitConfirmationModal';
 import NavigationBlocker from '../components/NavigationBlocker';
+import StopOverlay from '../components/game/StopOverlay';
 
 import MatrixRain from '../components/MatrixRain';
 import FaultyTerminalR3F from '../components/FaultyTerminalR3F';
@@ -30,6 +31,8 @@ export default function GameScreen() {
     sessionStorage.getItem('meuJogadorId') ||
     '0'
   );
+
+  const [showStopOverlay, setShowStopOverlay] = useState(false);
 
   // --- HOOKS DE LÓGICA ---
 
@@ -105,6 +108,21 @@ export default function GameScreen() {
       socket.off('effect:invert_screen', handler);
     };
   }, [socket, applyRandomRotation]);
+
+  // Listener para o evento de mostrar o overlay de STOP
+  useEffect(() => {
+    if (!socket) return;
+    const handler = () => {
+      setShowStopOverlay(true);
+      setTimeout(() => {
+        setShowStopOverlay(false);
+      }, 2000);
+    };
+    socket.on('show_stop_overlay', handler);
+    return () => {
+      socket.off('show_stop_overlay', handler);
+    };
+  }, [socket]);
 
   // 3. Hook de Power-ups:
   const { 
@@ -188,7 +206,11 @@ export default function GameScreen() {
         />
       </div>
 
-      {/* 1. Overlay de Jumpscare */}
+      {/* Overlays */}
+      <AnimatePresence>
+        {showStopOverlay && <StopOverlay />}
+      </AnimatePresence>
+
       <AnimatePresence>
         {effectsState.showJumpscare && (
           <JumpscareOverlay
@@ -200,7 +222,7 @@ export default function GameScreen() {
         )}
       </AnimatePresence>
 
-      {/* 2. Conteúdo Principal da Página */}
+      {/* Conteúdo Principal da Página */}
       {finalizado ? (
         <MatchEndScreen
           totais={totais}

@@ -531,6 +531,21 @@ export function initSockets(httpServer) { //
         });
     });
 
+    socket.on('player_wants_to_stop', async ({ salaId, roundId }) => {
+      salaId = String(salaId || socket.data.salaId);
+      roundId = Number(roundId);
+      const stoppedBy = socket.data.jogador_id;
+
+      if (!salaId || !roundId) return;
+
+      console.log(`[PLAYER_WANTS_TO_STOP] sala=${salaId} round=${roundId} by=${stoppedBy}`);
+      io.to(salaId).emit('show_stop_overlay', { roundId, by: stoppedBy });
+
+      setTimeout(() => {
+        socket.emit('round:stop', { salaId, roundId, by: stoppedBy });
+      }, 2000);
+    });
+
     socket.on('round:stop', async ({ salaId, roundId, by }) => {
   try {
     salaId = String(salaId || socket.data.salaId);
