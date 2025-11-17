@@ -93,12 +93,9 @@ function WaitingRoomScreen() {
             }
         };
 
-        const handlePlayersUpdate = ({ jogadores, jogadores_info }) => {
+        const handlePlayersUpdate = (salaData) => {
             if (isMounted) {
-                setSala(currentSala => {
-                    if (!currentSala) return null;
-                    return { ...currentSala, jogadores: jogadores, jogadores_info: jogadores_info };
-                });
+                setSala(salaData);
             }
         };
 
@@ -145,6 +142,8 @@ function WaitingRoomScreen() {
 
     const jogador1 = sala?.jogadores_info?.[0];
     const jogador2 = sala?.jogadores_info?.[1];
+    const meuJogadorId = Number(localStorage.getItem('meuJogadorId') || sessionStorage.getItem('meuJogadorId') || '0');
+    const is_creator = sala?.jogador_criador_id === meuJogadorId;
 
     return ( 
         <div 
@@ -216,7 +215,7 @@ function WaitingRoomScreen() {
                 
                 {sala.status === 'waiting' && ( 
                     <div className="text-center">
-                        {sala.is_creator ? ( 
+                        {is_creator ? ( 
                             <button
                                 onClick={handleStartGame} 
                                 disabled={loading || sala.jogadores?.length < 2} 

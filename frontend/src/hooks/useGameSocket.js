@@ -152,24 +152,29 @@ export function useGameSocket(salaId) {
     socket.on('player:reacted', onPlayerReacted);
 
     const fetchCurrentRound = async () => {
+      console.log(`[useGameSocket] Garantindo entrada na sala ${salaId} (fetchCurrentRound)`);
       joinRoom(salaId);
       try {
+        console.log(`[useGameSocket] Buscando rodada atual para sala ${salaId}...`);
         const response = await api.get(`/matches/current/${salaId}`);
-        if (!response.data.hasActiveRound) {
-          await api.post('/matches/start', { sala_id: Number(salaId), duration: 20 });
+        if (response.data.hasActiveRound) {
+          console.log(`[useGameSocket] Rodada atual encontrada, eventos serão emitidos pelo backend`);
+        } else {
+          console.log(`[useGameSocket] Nenhuma rodada ativa. Iniciando nova partida...`);
+          socket.emit('match:start', { salaId: Number(salaId) });
         }
       } catch (error) {
-        console.error("[useGameSocket] Erro ao buscar ou iniciar partida:", error);
-        alert(`Erro ao carregar a partida: ${error.response?.data?.error || error.message}`);
+        console.error("[useGameSocket] Erro ao buscar rodada atual:", error);
+        try {
+          socket.emit('match:start', { salaId: Number(salaId) });
+        } catch (startError) {
+          console.error("[useGameSocket] Erro ao iniciar partida:", startError);
+          alert(`Erro ao carregar a partida: ${startError.response?.data?.error || startError.message}`);
+        }
       }
     };
 
-    if (socket.connected) {
-      fetchCurrentRound();
-    } else {
-      socket.connect();
-      socket.once('connect', fetchCurrentRound);
-    }
+    fetchCurrentRound();
 
     return () => {
       console.log("Limpando listeners do useGameSocket");

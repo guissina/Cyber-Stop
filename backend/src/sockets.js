@@ -459,6 +459,18 @@ export function initSockets(httpServer) { //
         const io = getIO();
         if (io) {
             try {
+                const { data: salaData, error: salaError } = await supa
+                    .from('sala')
+                    .select(`
+                        sala_id, nome_sala, status, jogador_criador_id,
+                        jogador:jogador_criador_id ( nome_de_usuario ),
+                        temas_excluidos, letras_excluidas
+                    `)
+                    .eq('sala_id', salaId)
+                    .single();
+
+                if (salaError) throw salaError;
+
                 const { data: jogadoresData, error: jogadoresError } = await supa
                     .from('jogador_sala')
                     .select(`
@@ -474,26 +486,33 @@ export function initSockets(httpServer) { //
 
                 if (jogadoresError) throw jogadoresError;
 
-                const { data: salaDataForCreator, error: salaErrorForCreator } = await supa
-                    .from('sala')
-                    .select('jogador_criador_id')
-                    .eq('sala_id', salaId)
-                    .single();
-
-                if (salaErrorForCreator) throw salaErrorForCreator;
-
                 const jogadoresInfo = (jogadoresData || []).map(js => ({
                     jogador_id: js.jogador.jogador_id,
                     nome_de_usuario: js.jogador.nome_de_usuario,
                     avatar_nome: js.jogador.avatar_nome,
                     personagem_nome: js.jogador.personagem_nome,
                     ranking: js.jogador.ranking?.pontuacao_total,
-                    is_creator: js.jogador.jogador_id === salaDataForCreator.jogador_criador_id
+                    is_creator: js.jogador.jogador_id === salaData.jogador_criador_id
                 }));
 
                 const jogadoresNaSala = jogadoresInfo.map(j => j.nome_de_usuario);
 
-                io.to(String(salaId)).emit('room:players_updated', { jogadores: jogadoresNaSala, jogadores_info: jogadoresInfo });
+                const responseData = {
+                    sala_id: salaData.sala_id,
+                    nome_sala: salaData.nome_sala,
+                    status: salaData.status,
+                    jogador_criador_id: salaData.jogador_criador_id,
+                    jogador: {
+                        jogador_id: salaData.jogador_criador_id,
+                        nome_de_usuario: salaData.jogador?.nome_de_usuario || 'Desconhecido'
+                    },
+                    jogadores: jogadoresNaSala,
+                    jogadores_info: jogadoresInfo,
+                    temas_excluidos: salaData.temas_excluidos || [],
+                    letras_excluidas: salaData.letras_excluidas || []
+                };
+
+                io.to(String(salaId)).emit('room:players_updated', responseData);
             } catch (error) {
                 console.error(`[join-room] Error emitting players update for sala ${salaId}:`, error);
             }
