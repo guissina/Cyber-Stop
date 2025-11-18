@@ -27,6 +27,7 @@ export function useGameSocket(salaId) {
   const [activeSkipOpponentPowerUpId, setActiveSkipOpponentPowerUpId] = useState(null);
   const [revealPending, setRevealPending] = useState(false);
   const [revealedAnswer, setRevealedAnswer] = useState(null);
+  const [isHacked, setIsHacked] = useState(false); // State for keyboard hack
 
   // JUMPSCARE USE REF 0
   const jumpscareCooldownRef = useRef(0);
@@ -50,6 +51,7 @@ export function useGameSocket(salaId) {
       setRevealPending(false);
       setRevealedAnswer(null);
       setShowJumpscare(false);
+      setIsHacked(false); // Reset on new round
     };
 
     const onStarted = ({ duration, timeLeft }) => {
@@ -92,6 +94,15 @@ export function useGameSocket(salaId) {
       jumpscareCooldownRef.current = now + COOLDOWN_MS;
       setJumpscareData({ attackerId, image, sound, duration: 2 });
       setShowJumpscare(true);
+    };
+
+    const onPlayerHacked = ({ hackType, duration }) => {
+      if (hackType === 'KEYBOARD_HACK') {
+        setIsHacked(true);
+        setTimeout(() => {
+          setIsHacked(false);
+        }, duration);
+      }
     };
 
     const onEnableSkip = ({ powerUpId }) => {
@@ -142,6 +153,7 @@ export function useGameSocket(salaId) {
     socket.on('round:end', onEnd);
     socket.on('match:end', onMatchEnd);
     socket.on('effect:jumpscare', onJumpscareEffect);
+    socket.on('player:hacked', onPlayerHacked); // Listen for the hack event
     socket.on('effect:enable_skip', onEnableSkip);
     socket.on('effect:enable_skip_opponent', onEnableSkipOpponent);
     socket.on('effect:answer_revealed', onAnswerRevealed);
@@ -185,6 +197,7 @@ export function useGameSocket(salaId) {
       socket.off('round:end', onEnd);
       socket.off('match:end', onMatchEnd);
       socket.off('effect:jumpscare', onJumpscareEffect);
+      socket.off('player:hacked', onPlayerHacked); // Cleanup listener
       socket.off('effect:enable_skip', onEnableSkip);
       socket.off('effect:enable_skip_opponent', onEnableSkipOpponent);
       socket.off('effect:answer_revealed', onAnswerRevealed);
@@ -223,6 +236,7 @@ export function useGameSocket(salaId) {
       revealPending,
       revealedAnswer,
       lastReaction, // <-- NOVO
+      isHacked, // <-- NOVO
     }
   };
   // --- FIM DA MUDANÇA NO RETORNO ---

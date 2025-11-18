@@ -23,6 +23,7 @@ import StopOverlay from '../components/game/StopOverlay';
 
 import MatrixRain from '../components/MatrixRain';
 import FaultyTerminalR3F from '../components/FaultyTerminalR3F';
+import HackWarningOverlay from '../components/game/HackWarningOverlay';
 import PixelBlast from '../components/PixelBlast';
 
 export default function GameScreen() {
@@ -51,7 +52,7 @@ export default function GameScreen() {
 
   // Desestrutura o estado para passar para os outros hooks
   const { rodadaId, isLocked, finalizado, totais, vencedor, roundResults } = gameState;
-  const { activeSkipPowerUpId, setActiveSkipPowerUpId, activeSkipOpponentPowerUpId, setActiveSkipOpponentPowerUpId } = effectsState;
+  const { activeSkipPowerUpId, setActiveSkipPowerUpId, activeSkipOpponentPowerUpId, setActiveSkipOpponentPowerUpId, isHacked } = effectsState;
 
   // Hook de confirmação de saída - partida começou se está na GameScreen
   const matchStarted = true;
@@ -79,7 +80,8 @@ export default function GameScreen() {
   } = useGameInput(
     gameState,
     salaId, 
-    meuJogadorId
+    meuJogadorId,
+    isHacked // Pass the isHacked state to the input hook
   );
 
   // Conecta o evento de categoria desconsiderada do socket ao handler local
@@ -222,6 +224,10 @@ export default function GameScreen() {
             onEnd={() => effectsState.setShowJumpscare(false)}
           />
         )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isHacked && <HackWarningOverlay />}
       </AnimatePresence>
 
       {/* Conteúdo Principal da Página */}

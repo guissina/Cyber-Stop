@@ -900,6 +900,36 @@ export function initSockets(httpServer) { //
                   }
                   break;
 
+            case 'KEYBOARD_HACK':
+              try {
+                const todosJogadores = await getJogadoresDaSala(salaId);
+                const oponentesIds = todosJogadores.filter(id => id !== usuarioJogadorId);
+
+                if (oponentesIds.length === 0) {
+                  socket.emit('powerup:error', { message: 'Não há oponentes na sala para hackear.' });
+                  break;
+                }
+
+                // Atualmente, o jogo é 1v1, então pegamos o primeiro oponente.
+                const targetId = oponentesIds[0];
+                const targetSocketId = await getSocketIdByPlayerId(targetId);
+
+                if (targetSocketId) {
+                  io.to(targetSocketId).emit('player:hacked', {
+                    hackType: 'KEYBOARD_HACK',
+                    duration: 4000 // 4 segundos
+                  });
+                  socket.emit('powerup:ack', { codigo: efeito, message: 'Teclado do oponente hackeado!' });
+                  console.log(`[KEYBOARD_HACK] Jogador ${usuarioJogadorId} hackeou o teclado de ${targetId} por 4s`);
+                } else {
+                  socket.emit('powerup:error', { message: 'Oponente não está conectado.' });
+                }
+              } catch (err) {
+                console.error('[KEYBOARD_HACK] Erro:', err);
+                socket.emit('powerup:error', { message: 'Erro ao aplicar o hack de teclado.' });
+              }
+              break;
+
             default:
                 console.warn(`[powerup:use] Efeito desconhecido: ${efeito}`);
                 socket.emit('powerup:error', { message: `Efeito não implementado: ${efeito}` });

@@ -1,11 +1,14 @@
 // src/hooks/useGameInput.js
 import { useState, useRef, useEffect } from 'react';
-import api from '../lib/api'; // <-- Corrija para '../../lib/api'
-import socket from '../lib/socket'; // <-- Corrija para '../../lib/socket'
+import api from '../lib/api';
+import socket from '../lib/socket';
 
-// 1. Mude os parâmetros
-export function useGameInput(gameState, salaId, meuJogadorId) {
-  // 2. Desestruture o estado AQUI DENTRO
+const scrambleChar = () => {
+  const chars = 'abcdefghijklmnopqrstuvwxyz!@#$%^&*()_+-=[]{}|;:,.<>?';
+  return chars[Math.floor(Math.random() * chars.length)];
+};
+
+export function useGameInput(gameState, salaId, meuJogadorId, isHacked) {
   const { rodadaId, isLocked } = gameState;
 
   const [answers, setAnswers] = useState({});
@@ -13,7 +16,6 @@ export function useGameInput(gameState, salaId, meuJogadorId) {
   const [disregardedCategories, setDisregardedCategories] = useState(new Set());
   const debounceTimers = useRef(new Map());
 
-  // Limpa respostas quando a rodadaId muda (agora depende do rodadaId vindo do gameState)
   useEffect(() => {
     setAnswers({});
     setSkippedCategories(new Set());
@@ -24,9 +26,8 @@ export function useGameInput(gameState, salaId, meuJogadorId) {
 
   }, [rodadaId]);
 
-  // ---- AUTOSAVE (debounced) ----
   async function autosaveAnswer(temaId, texto) {
-    if (!rodadaId || isLocked) return; // Agora usa o rodadaId e isLocked do estado
+    if (!rodadaId || isLocked) return;
     const key = String(temaId);
 
     const prev = debounceTimers.current.get(key);
@@ -50,18 +51,30 @@ export function useGameInput(gameState, salaId, meuJogadorId) {
     debounceTimers.current.set(key, t);
   }
 
-  // Atualiza o estado local 'answers' e agenda o auto-save
   const updateAnswer = (temaId, texto) => {
-    if (isLocked) return; // Usa o isLocked do estado
+    if (isLocked) return;
     if (skippedCategories.has(temaId)) return;
-    if (disregardedCategories.has(temaId)) return; // Não permite editar categoria desconsiderada
-    setAnswers(prev => ({ ...prev, [temaId]: texto }));
-    autosaveAnswer(temaId, texto);
+    if (disregardedCategories.has(temaId)) return;
+
+    if (isHacked) {
+      const originalValue = answers[temaId] || '';
+      // Scramble only the newly typed character
+      if (texto.length > originalValue.length) {
+        const scrambledText = originalValue + scrambleChar();
+        setAnswers(prev => ({ ...prev, [temaId]: scrambledText }));
+        autosaveAnswer(temaId, scrambledText);
+      } else {
+        // Allow backspace
+        setAnswers(prev => ({ ...prev, [temaId]: texto }));
+        autosaveAnswer(temaId, texto);
+      }
+    } else {
+      setAnswers(prev => ({ ...prev, [temaId]: texto }));
+      autosaveAnswer(temaId, texto);
+    }
   };
 
-  // Envia todas as respostas pendentes
   const enviarRespostas = async (roundIdSnapshot, categoriasIgnoradas = new Set()) => {
-    // Usa o rodadaId do snapshot (do effect) ou o rodadaId atual do estado
     const rid = Number(roundIdSnapshot || rodadaId);
     if (!rid) return;
 
@@ -94,13 +107,10 @@ export function useGameInput(gameState, salaId, meuJogadorId) {
     }
   };
 
-  // Função chamada ao clicar no botão STOP
   const onStop = async () => {
     const rid = Number(rodadaId);
-    if (!rid || isLocked) return; // Usa o isLocked do estado
+    if (!rid || isLocked) return;
     console.log(`Botão STOP pressionado por ${meuJogadorId} para rodada ${rid}`);
-    
-    // O 'isLocked' será setado pelo hook de socket
     
     try {
         await enviarRespostas(rid, skippedCategories);
@@ -113,18 +123,15 @@ export function useGameInput(gameState, salaId, meuJogadorId) {
     });
   };
 
-  // --- Função para PULAR uma categoria ---
   const handleSkipCategory = (temaId) => {
       console.log(`Jogador ${meuJogadorId} pulou a categoria ${temaId}`);
-      updateAnswer(temaId, ''); // Limpa a resposta
+      updateAnswer(temaId, '');
       setSkippedCategories(prev => new Set(prev).add(temaId));
   };
 
-  // Handler para quando uma categoria é desconsiderada pelo oponente
   const handleCategoryDisregarded = (temaId) => {
     console.log(`Categoria ${temaId} foi desconsiderada pelo oponente`);
     setDisregardedCategories(prev => new Set(prev).add(temaId));
-    // Limpa a resposta da categoria desconsiderada
     setAnswers(prev => {
       const newAnswers = { ...prev };
       delete newAnswers[temaId];
