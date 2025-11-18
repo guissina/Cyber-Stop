@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useEffect, useState } from 'react';
 import { LogOut } from 'lucide-react';
+import { toast } from 'sonner'; // Import toast
 
 // Nossos novos Hooks
 import { useGameSocket } from '../hooks/useGameSocket';
@@ -181,6 +182,20 @@ export default function GameScreen() {
     handleUsePowerUp(powerUp);
   };
 
+  // --- EFFECT PARA REDIRECIONAR EM CASO DE WO ---
+  useEffect(() => {
+    if (finalizado && vencedor?.wo) {
+      toast.success('Oponente desconectou! Você venceu por W.O.!', {
+        duration: 5000,
+        position: 'top-center',
+      });
+      // Pequeno delay para o toast ser visível antes de redirecionar
+      setTimeout(() => {
+        navigate('/', { replace: true });
+      }, 1000); 
+    }
+  }, [finalizado, vencedor, navigate]);
+
   // --- RENDERIZAÇÃO ---
   return (
     <>
@@ -231,7 +246,7 @@ export default function GameScreen() {
       </AnimatePresence>
 
       {/* Conteúdo Principal da Página */}
-      {finalizado ? (
+      {finalizado && !vencedor?.wo ? ( // Modificado para não mostrar MatchEndScreen em caso de WO
         <MatchEndScreen
           totais={totais}
           vencedor={vencedor}
