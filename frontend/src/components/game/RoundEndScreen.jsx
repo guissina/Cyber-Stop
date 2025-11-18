@@ -4,6 +4,7 @@ import socket from '../../lib/socket';
 // 1. IMPORTAR AS FERRAMENTAS DE ANIMAÇÃO
 import { motion, AnimatePresence } from 'framer-motion';
 import { LogOut } from 'lucide-react';
+import emojiSounds from '../../lib/emojiSoundList'; // Import the emoji sounds map
 
 // Componente de Reações (Modal de Emojis) - (Sem mudanças)
 function EmojiReactions({ salaId }) {
@@ -14,11 +15,20 @@ function EmojiReactions({ salaId }) {
     { id: 'fail', text: '🤦' },
   ];
 
+  const [isCooldown, setIsCooldown] = useState(false);
+
   const handleReactionClick = (emojiId) => {
+    if (isCooldown) return; // Prevent sending if on cooldown
+
     socket.emit('player:react', {
       salaId: salaId,
       emojiId: emojiId,
     });
+
+    setIsCooldown(true);
+    setTimeout(() => {
+      setIsCooldown(false);
+    }, 1500); // 1.5 seconds cooldown
   };
 
   return (
@@ -29,6 +39,7 @@ function EmojiReactions({ salaId }) {
           onClick={() => handleReactionClick(emoji.id)}
           className="p-3 bg-gray-800/50 border border-purple-700/50 rounded-lg hover:bg-purple-900/60 transition-all text-2xl text-white shadow-purple-glow"
           title={emoji.id}
+          disabled={isCooldown} // Disable button during cooldown
         >
           {emoji.text}
         </button>
@@ -104,6 +115,14 @@ export default function RoundEndScreen({ results, salaId, meuJogadorId, temas = 
       // Adiciona a nova reação ao estado
       setActiveReactions(prev => [...prev, newReaction]);
       
+      // Toca o som do emoji
+      const soundUrl = emojiSounds[emojiId];
+      if (soundUrl) {
+        const emojiAudio = new Audio(soundUrl);
+        emojiAudio.volume = 0.5; // Adjust volume as needed
+        emojiAudio.play().catch(e => console.error("Error playing emoji sound:", e));
+      }
+
       // Limpa a reação do estado após a animação (2000ms = 2s)
       // O AnimatePresence cuidará da animação de saída
       setTimeout(() => {
