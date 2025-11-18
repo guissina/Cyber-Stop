@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import socket from '../../lib/socket';
 // 1. IMPORTAR AS FERRAMENTAS DE ANIMAÇÃO
 import { motion, AnimatePresence } from 'framer-motion';
+import { LogOut } from 'lucide-react';
 
 // Componente de Reações (Modal de Emojis) - (Sem mudanças)
 function EmojiReactions({ salaId }) {
@@ -71,7 +72,7 @@ function EmojiSparkle({ reactions }) {
 }
 
 // 3. Componente Principal da Tela (Sem mudanças na lógica)
-export default function RoundEndScreen({ results, salaId, meuJogadorId, temas = [], jogadores = [] }) {
+export default function RoundEndScreen({ results, salaId, meuJogadorId, temas = [], jogadores = [], handleExitClick, navigate }) {
   const [activeReactions, setActiveReactions] = useState([]);
 
   // Pega os IDs dos jogadores a partir dos resultados (mais confiável)
@@ -118,6 +119,15 @@ export default function RoundEndScreen({ results, salaId, meuJogadorId, temas = 
   return (
     // 'relative' é crucial para o 'absolute' dos emojis funcionar
     <div className="relative w-full h-full flex flex-col items-center justify-center text-white p-8 overflow-hidden">
+      <div className="absolute top-4 right-4 z-50">
+        <button
+          onClick={() => handleExitClick(() => navigate('/'))}
+          className="bg-red-600/50 hover:bg-red-500/80 text-white p-2 rounded-lg transition-colors cursor-target"
+          title="Sair da Partida"
+        >
+          <LogOut size={20} />
+        </button>
+      </div>
       
       {/* Efeito de animação de emoji */}
       <EmojiSparkle reactions={activeReactions} />

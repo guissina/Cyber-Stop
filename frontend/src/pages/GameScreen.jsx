@@ -1,7 +1,8 @@
 // src/pages/GameScreen.jsx
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useEffect, useState } from 'react';
+import { LogOut } from 'lucide-react';
 
 // Nossos novos Hooks
 import { useGameSocket } from '../hooks/useGameSocket';
@@ -26,6 +27,7 @@ import PixelBlast from '../components/PixelBlast';
 
 export default function GameScreen() {
   const { salaId } = useParams();
+  const navigate = useNavigate();
   const meuJogadorId = Number(
     localStorage.getItem('meuJogadorId') ||
     sessionStorage.getItem('meuJogadorId') ||
@@ -238,6 +240,8 @@ export default function GameScreen() {
           jogadores={gameState.jogadores}
           salaId={salaId}
           meuJogadorId={meuJogadorId}
+          handleExitClick={handleExitClick}
+          navigate={navigate}
         />
       ) : !rodadaId ? (
         <WaitingForRound salaId={salaId} />
@@ -250,6 +254,8 @@ export default function GameScreen() {
           inputState={{ answers, updateAnswer, onStop, skippedCategories, disregardedCategories, handleSkipCategory: onSkipCategory }}
           powerUpState={{ inventario, loadingInventory, handleUsePowerUp: onUsePowerUp }}
           onSkipOpponentCategory={onSkipOpponentCategory}
+          handleExitClick={handleExitClick}
+          navigate={navigate}
         />
       )}
     </>

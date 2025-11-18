@@ -2,7 +2,20 @@
 import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { supa } from '../services/supabase.js'; //
-import { endRoundAndScore, getNextRoundForSala, getJogadoresDaSala, getRoundResults, buildRoundPayload, generateCoherentRounds } from '../services/game.js'; //
+import { 
+    endRoundAndScore, 
+    getNextRoundForSala, 
+    getJogadoresDaSala, 
+    getRoundResults, 
+    buildRoundPayload, 
+    generateCoherentRounds,
+    endMatchByWalkover,
+    computeWinner,
+    adicionarMoedas,
+    MOEDAS_VITORIA,
+    MOEDAS_EMPATE,
+    MOEDAS_PARTICIPACAO
+} from '../services/game.js'; //
 import { saveRanking } from '../services/ranking.js'; //
 
 const JWT_SECRET = process.env.JWT_SECRET || 'developer_secret_key'; //
@@ -27,10 +40,6 @@ async function ensureTempoId(durationSeconds) {
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms)); //
 const GRACE_MS = 3000; //
-
-const MOEDAS_VITORIA = 50; //
-const MOEDAS_EMPATE = 25; //
-const MOEDAS_PARTICIPACAO = 5; //
 
 let io; //
 
@@ -145,51 +154,6 @@ function alreadyScored(salaId, roundId) {
     return false; //
 }
 
-// Função para adicionar moedas a um jogador
-// Moedas são armazenadas na tabela 'inventario' com item_id: 11 (item MOEDA)
-async function adicionarMoedas(jogadorId, quantidade) {
-    if (!jogadorId || quantidade <= 0) return;
-    try {
-      console.log(`[MOEDAS] Adicionando ${quantidade} moedas para jogador ${jogadorId}...`);
-
-      // Primeiro, tenta buscar o saldo atual de moedas
-      const { data: inventarioAtual, error: selectError } = await supa
-        .from('inventario')
-        .select('qtde')
-        .eq('jogador_id', jogadorId)
-        .eq('item_id', 11)
-        .single();
-
-      if (selectError && selectError.code !== 'PGRST116') throw selectError; // PGRST116 = não encontrado
-
-      // Calcula o novo saldo (se não existe, começa com 0)
-      const saldoAtual = inventarioAtual?.qtde || 0;
-      const novoSaldo = saldoAtual + quantidade;
-
-      // Agora faz o upsert com o novo saldo
-      const { error: upsertError } = await supa
-        .from('inventario')
-        .upsert({
-          jogador_id: jogadorId,
-          item_id: 11, // item_id da MOEDA
-          qtde: novoSaldo,
-          data_hora_ultima_atualizacao: new Date().toISOString()
-        }, {
-          onConflict: 'jogador_id,item_id'
-        });
-
-      if (upsertError) throw upsertError;
-      console.log(`[MOEDAS] ${quantidade} moedas adicionadas para jogador ${jogadorId}. Novo saldo: ${novoSaldo}`);
-
-      // Opcional: Notificar o jogador sobre o ganho de moedas via socket
-      // const socketId = await getSocketIdByPlayerId(jogadorId);
-      // if (socketId) io.to(socketId).emit('player:coins_updated', { novo_saldo: novoSaldo });
-
-    } catch(e) {
-        console.error(`[MOEDAS] Erro ao adicionar ${quantidade} moedas para jogador ${jogadorId}:`, e.message);
-    }
-}
-
 // Função auxiliar para obter ID de socket por jogador_id
 async function getSocketIdByPlayerId(targetPlayerId) { //
     if (!io) return null; // Garante que io existe
@@ -264,6 +228,40 @@ export function scheduleRoundCountdown({ salaId, roundId, duration = 20 }) { //
 
         const next = await getNextRoundForSala({ salaId, afterRoundId: roundId }); //
         if (next) { //
+            const jogadoresAtuais = await getJogadoresDaSala(salaId);
+            if (jogadoresAtuais.length < 2) {
+                console.log(`[TIMER] Menos de 2 jogadores na sala ${salaId}. Encerrando a partida.`);
+                
+                let winnerInfo = null;
+                let totais = payload.totais || {};
+
+                if (jogadoresAtuais.length === 1) {
+                    const winnerId = jogadoresAtuais[0];
+                    winnerInfo = {
+                        empate: false,
+                        jogador_id: winnerId,
+                        total: totais[winnerId] || 'W.O.',
+                        wo: true
+                    };
+                    await adicionarMoedas(winnerId, MOEDAS_VITORIA + MOEDAS_PARTICIPACAO);
+                }
+
+                await supa.from('sala').update({ status: 'terminada' }).eq('sala_id', salaId);
+
+                try {
+                    await saveRanking({ salaId, totais, winnerInfo });
+                } catch (rankingError) {
+                    console.error(`[TIMER->MATCH_END] Erro ao salvar ranking para sala ${salaId}:`, rankingError);
+                }
+
+                io.to(salaId).emit('match:end', {
+                    totais: totais,
+                    vencedor: winnerInfo
+                });
+                console.log(`[TIMER->MATCH_END] Fim de partida por insuficiência de jogadores para sala ${salaId}`);
+
+                return; // Stop further execution
+            }
             // Aguarda 10 segundos antes de iniciar a próxima rodada
             console.log(`[TIMER->NEXT_ROUND] Aguardando 10 segundos antes de iniciar próxima rodada ${next.rodada_id} para sala ${salaId}`);
             setTimeout(async () => {
@@ -520,6 +518,43 @@ export function initSockets(httpServer) { //
         const next = await getNextRoundForSala({ salaId, afterRoundId: roundId });
 
         if (next) {
+            const jogadoresAtuais = await getJogadoresDaSala(salaId);
+            if (jogadoresAtuais.length < 2) {
+                console.log(`[PROCESS_SCORING] Menos de 2 jogadores na sala ${salaId}. Encerrando a partida.`);
+                
+                clearTimerForSala(salaId);
+
+                let winnerInfo = null;
+                let totais = payload.totais || {};
+
+                if (jogadoresAtuais.length === 1) {
+                    const winnerId = jogadoresAtuais[0];
+                    winnerInfo = {
+                        empate: false,
+                        jogador_id: winnerId,
+                        total: totais[winnerId] || 'W.O.',
+                        wo: true
+                    };
+                    await adicionarMoedas(winnerId, MOEDAS_VITORIA + MOEDAS_PARTICIPACAO);
+                }
+
+                await supa.from('sala').update({ status: 'terminada' }).eq('sala_id', salaId);
+
+                try {
+                    await saveRanking({ salaId, totais, winnerInfo });
+                } catch (rankingError) {
+                    console.error(`[PROCESS_SCORING->MATCH_END] Erro ao salvar ranking para sala ${salaId}:`, rankingError);
+                }
+
+                io.to(salaId).emit('match:end', {
+                    totais: totais,
+                    vencedor: winnerInfo
+                });
+                console.log(`[PROCESS_SCORING->MATCH_END] Fim de partida por insuficiência de jogadores para sala ${salaId}`);
+
+                return; // Stop further execution
+            }
+
             console.log(
             `[${sourceLabel}->NEXT_ROUND] Aguardando 10 segundos antes de iniciar próxima rodada ${next.rodada_id} para sala ${salaId}`
             );
@@ -1028,35 +1063,83 @@ export function initSockets(httpServer) { //
       }
     });
 
-    socket.on('disconnect', (reason) => { //
-        console.log('user disconnected:', socket.id, 'jogador_id:', socket.data.jogador_id, 'reason:', reason); //
-        // Lógica para remover jogador da sala no disconnect (simplificado)
-        const salaId = socket.data.salaId; //
-        const jogadorId = socket.data.jogador_id; //
-        if (salaId && jogadorId) {
-           console.log(`[DISCONNECT] Removendo jogador ${jogadorId} da sala ${salaId} (se existir)...`);
-           supa.from('jogador_sala').delete().match({ sala_id: salaId, jogador_id: jogadorId })
-             .then(({ error }) => {
-                 if (error) {
-                     console.error(`[DISCONNECT] Erro ao remover jogador ${jogadorId} da sala ${salaId}:`, error);
-                 } else {
-                     console.log(`[DISCONNECT] Jogador ${jogadorId} removido da sala ${salaId} (ou já não estava).`);
-                     // Emitir atualização de jogadores para a sala
-                     const io = getIO();
-                     if (io) {
-                        supa.from('jogador_sala')
-                            .select('jogador:jogador_id(nome_de_usuario)')
-                            .eq('sala_id', salaId)
-                            .then(({ data: playersData, error: playersError }) => {
-                                if (!playersError) {
-                                    const playerNames = (playersData || []).map(p => p.jogador?.nome_de_usuario || 'Desconhecido');
-                                    console.log(`[DISCONNECT] Emitindo players_updated para sala ${salaId}:`, playerNames);
-                                    io.to(salaId).emit('room:players_updated', { jogadores: playerNames });
-                                }
-                            });
-                     }
-                 }
-             });
+    socket.on('disconnect', async (reason) => {
+        console.log('user disconnected:', socket.id, 'jogador_id:', socket.data.jogador_id, 'reason:', reason);
+        const salaId = socket.data.salaId;
+        const disconnectedPlayerId = socket.data.jogador_id;
+
+        if (!salaId || !disconnectedPlayerId) {
+            return; // No room or player info, nothing to do
+        }
+
+        try {
+            // 1. Check room status
+            const { data: salaData, error: salaError } = await supa
+                .from('sala')
+                .select('status')
+                .eq('sala_id', salaId)
+                .single();
+
+            if (salaError && salaError.code !== 'PGRST116') { // PGRST116 = Not found, which is ok
+                throw salaError;
+            }
+
+            // If match is in progress, end it by W.O.
+            if (salaData && salaData.status === 'in_progress') {
+                console.log(`[DISCONNECT] Player ${disconnectedPlayerId} left match in progress in sala ${salaId}. Ending match.`);
+
+                clearTimerForSala(salaId);
+
+                // 2. Find the remaining player
+                const { data: playersInRoom, error: playersError } = await supa
+                    .from('jogador_sala')
+                    .select('jogador_id')
+                    .eq('sala_id', salaId);
+
+                if (playersError) throw playersError;
+
+                const remainingPlayer = playersInRoom.find(p => p.jogador_id !== disconnectedPlayerId);
+
+                if (remainingPlayer) {
+                    const winnerId = remainingPlayer.jogador_id;
+                    console.log(`[DISCONNECT] Player ${winnerId} is the winner by W.O.`);
+
+                    const winnerInfo = {
+                        empate: false,
+                        jogador_id: winnerId,
+                        total: null, 
+                        wo: true 
+                    };
+
+                    const totais = {
+                        [winnerId]: 'W.O.',
+                        [disconnectedPlayerId]: 'Desistiu'
+                    };
+
+                    await supa.from('sala').update({ status: 'terminada' }).eq('sala_id', salaId);
+
+                    await adicionarMoedas(winnerId, MOEDAS_VITORIA);
+                    await saveRanking({ salaId, totais, winnerInfo });
+
+                    io.to(String(salaId)).emit('match:end', {
+                        totais,
+                        vencedor: winnerInfo
+                    });
+                    console.log(`[DISCONNECT] Emitted match:end for sala ${salaId}`);
+                }
+            }
+
+            // 7. Finally, remove the disconnected player from jogador_sala
+            await supa.from('jogador_sala').delete().match({ sala_id: salaId, jogador_id: disconnectedPlayerId });
+            console.log(`[DISCONNECT] Player ${disconnectedPlayerId} removed from jogador_sala for sala ${salaId}.`);
+
+            // Emit player list update for lobby screens
+            const { data: remainingPlayersData } = await supa.from('jogador_sala').select('jogador:jogador_id(nome_de_usuario)').eq('sala_id', salaId);
+            const playerNames = (remainingPlayersData || []).map(p => p.jogador?.nome_de_usuario || 'Desconhecido');
+            io.to(String(salaId)).emit('room:players_updated', { jogadores: playerNames });
+
+        } catch (error) {
+            console.error(`[DISCONNECT] Error handling disconnect for player ${disconnectedPlayerId} in sala ${salaId}:`, error);
         }
     });
 
@@ -1066,28 +1149,3 @@ export function initSockets(httpServer) { //
 }
 
 export function getIO() { return io; } //
-
-
-function computeWinner(totaisObj = {}) { //
-     const entries = Object.entries(totaisObj).map(([id, total]) => [Number(id), Number(total || 0)]); //
-  if (!entries.length) return null; //
-
-  entries.sort((a, b) => b[1] - a[1]); //
-  const topScore = entries[0][1]; //
-
-  const empatados = entries.filter(([, total]) => total === topScore).map(([id]) => id); //
-
-  if (empatados.length > 1) { //
-    return { //
-      empate: true, //
-      jogadores: empatados, //
-      total: topScore //
-    };
-  }
-
-  return { //
-    empate: false, //
-    jogador_id: entries[0][0], //
-    total: topScore //
-  };
-}

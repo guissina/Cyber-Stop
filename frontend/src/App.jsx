@@ -1,4 +1,4 @@
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { useEffect, useState } from 'react';
 
@@ -51,7 +51,11 @@ const playAudio = async () => {
 
 
 function App() {
+  const location = useLocation();
   const [isMuted, setIsMuted] = useState(false);
+
+  const isGameScreen = location.pathname.startsWith('/game/');
+  const isWaitingRoom = location.pathname.startsWith('/waiting/');
 
   const toggleMute = () => {
     // We now just toggle the state. The effect will handle the volume.
@@ -91,13 +95,11 @@ function App() {
         }}
       />
       
-      {/* 3. ADICIONAR O HEADER AQUI */}
-      {/* Ele ficará fixo no topo de todas as páginas */}
-      <Header isMuted={isMuted} toggleMute={toggleMute} />
+      {!isGameScreen && !isWaitingRoom && <Header isMuted={isMuted} toggleMute={toggleMute} />}
 
       {/* O 'main' agora tem o padding-top (pt-[72px]) 
           para não ficar escondido atrás do Header */}
-      <main className="pt-[72px] min-h-screen">
+      <main className={!isGameScreen && !isWaitingRoom ? "pt-[72px] min-h-screen" : "min-h-screen"}>
         {/* O Outlet renderiza as páginas (Home, Lobby, etc.) */}
         <Outlet /> 
       </main>

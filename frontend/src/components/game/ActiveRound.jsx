@@ -1,6 +1,6 @@
 // src/components/game/ActiveRound.jsx
 import CategoryRow from '../CategoryRow';
-import { Zap, Loader2, Star, SkipForward, Eye, Ghost } from 'lucide-react';
+import { Zap, Loader2, Star, SkipForward, Eye, Ghost, LogOut } from 'lucide-react';
 // 1. IMPORTAÇÃO DO PowerUpRadialMenu REMOVIDA
 
 import MatrixRain from '../MatrixRain';
@@ -13,6 +13,8 @@ export default function ActiveRound({
   inputState,
   powerUpState,
   onSkipOpponentCategory,
+  handleExitClick,
+  navigate,
 }) {
   const { 
     letra, 
@@ -116,9 +118,15 @@ export default function ActiveRound({
       // Aplicada fonte cyber e perspectiva
 
       <div className="max-w-3xl mx-auto text-white space-y-4 p-4 relative font-cyber [perspective:1000px]">
-
-        
-
+        <div className="absolute top-4 right-4 z-50">
+          <button
+            onClick={() => handleExitClick(() => navigate('/'))}
+            className="bg-red-600/50 hover:bg-red-500/80 text-white p-2 rounded-lg transition-colors cursor-target"
+            title="Sair da Partida"
+          >
+            <LogOut size={20} />
+          </button>
+        </div>
         
 
         {/* Cabeçalho com Timer e ID (com augmented-ui) */}

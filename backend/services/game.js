@@ -572,6 +572,104 @@ export async function generateCoherentRounds({ totalRounds = 5 }) {
   return rounds // Retorna a lista de rodadas prontas para serem inseridas no banco
 }
 
+export const MOEDAS_VITORIA = 50;
+export const MOEDAS_EMPATE = 25;
+export const MOEDAS_PARTICIPACAO = 5;
+
+export async function adicionarMoedas(jogadorId, quantidade) {
+    if (!jogadorId || quantidade <= 0) return;
+    try {
+      console.log(`[MOEDAS] Adicionando ${quantidade} moedas para jogador ${jogadorId}...`);
+
+      const { data: inventarioAtual, error: selectError } = await supa
+        .from('inventario')
+        .select('qtde')
+        .eq('jogador_id', jogadorId)
+        .eq('item_id', 11) // MOEDA
+        .single();
+
+      if (selectError && selectError.code !== 'PGRST116') throw selectError;
+
+      const saldoAtual = inventarioAtual?.qtde || 0;
+      const novoSaldo = saldoAtual + quantidade;
+
+      const { error: upsertError } = await supa
+        .from('inventario')
+        .upsert({
+          jogador_id: jogadorId,
+          item_id: 11,
+          qtde: novoSaldo,
+          data_hora_ultima_atualizacao: new Date().toISOString()
+        }, {
+          onConflict: 'jogador_id,item_id'
+        });
+
+      if (upsertError) throw upsertError;
+      console.log(`[MOEDAS] ${quantidade} moedas adicionadas para jogador ${jogadorId}. Novo saldo: ${novoSaldo}`);
+
+    } catch(e) {
+        console.error(`[MOEDAS] Erro ao adicionar ${quantidade} moedas para jogador ${jogadorId}:`, e.message);
+    }
+}
+
+export function computeWinner(totaisObj = {}) {
+     const entries = Object.entries(totaisObj).map(([id, total]) => [Number(id), Number(total || 0)]);
+  if (!entries.length) return null;
+
+  entries.sort((a, b) => b[1] - a[1]);
+  const topScore = entries[0][1];
+
+  const empatados = entries.filter(([, total]) => total === topScore).map(([id]) => id);
+
+  if (empatados.length > 1) {
+    return {
+      empate: true,
+      jogadores: empatados,
+      total: topScore
+    };
+  }
+
+  return {
+    empate: false,
+    jogador_id: entries[0][0],
+    total: topScore
+  };
+}
+
+export async function endMatchByWalkover(salaId, disconnectedPlayerId) {
+    try {
+        const playersInRoom = await getJogadoresDaSala(salaId);
+        const remainingPlayer = playersInRoom.find(pId => pId !== disconnectedPlayerId);
+
+        if (remainingPlayer) {
+            const winnerId = remainingPlayer;
+            console.log(`[WALKOVER] Player ${winnerId} is the winner by W.O. in sala ${salaId}.`);
+
+            const winnerInfo = {
+                empate: false,
+                jogador_id: winnerId,
+                total: null,
+                wo: true
+            };
+
+            const totais = {
+                [winnerId]: 'W.O.',
+                [disconnectedPlayerId]: 'Desistiu'
+            };
+
+            await supa.from('sala').update({ status: 'terminada' }).eq('sala_id', salaId);
+            await adicionarMoedas(winnerId, MOEDAS_VITORIA);
+            await saveRanking({ salaId, totais, winnerInfo });
+
+            return { totais, vencedor: winnerInfo };
+        }
+        return null; // No remaining player found
+    } catch (error) {
+        console.error(`[WALKOVER] Error ending match by walkover for sala ${salaId}:`, error);
+        return null;
+    }
+}
+
 /* =========================
    LETRAS sem repetição (fallback antigo - manter caso precise?)
 ========================= */
