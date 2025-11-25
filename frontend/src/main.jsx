@@ -69,7 +69,7 @@ const router = createBrowserRouter([
         element: <RankingScreen />
       },
       {
-        path: 'about',
+        path: 'about-us',
         element: <AboutUsScreen />
       },
       {

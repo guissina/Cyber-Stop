@@ -6,35 +6,66 @@ import api from '../lib/api';
 // --- Data for Team Members ---
 const teamMembers = [
   {
-    name: 'Breno Ribeiro',
+    name: 'Breno Cerioni (Líder)',
+    role: 'Frontend',
+    linkedin: 'https://www.linkedin.com/in/breno-cerioni-a5061324a/',
+    github: 'https://github.com/BrenoSca170',
+  },
+  {
+    name: 'Pedro Ferreira',
+    role: 'Frontend',
+    linkedin: 'https://www.linkedin.com/in/pedro-rodrigues-39481725a/',
+  },
+  {
+    name: 'Eduardo Voga',
     role: 'Gerenciador do projeto',
     linkedin: 'https://www.linkedin.com/in/breno-ribeiro-gomes-953ba424b/',
     github: 'https://github.com/BrenoRibeiroGomes',
   },
   {
-    name: 'Vitor Dacio',
-    role: 'Backend',
-    linkedin: 'https://www.linkedin.com/in/vitor-dacio/',
-    github: 'https://github.com/VitorDacio',
-  },
-    {
-    name: 'Ryan Signor',
-    role: 'Frontend',
-    linkedin: 'https://www.linkedin.com/in/ryan-signor-2053a2283/',
-    github: 'https://github.com/RyanSignor',
-  },
-  {
-    name: 'Willian Dacio',
-    role: 'Frontend',
-    linkedin: 'https://www.linkedin.com/in/willian-dacio-7977a9284/',
-    github: 'https://github.com/WillianDacio',
-  },
-  {
-    name: 'Luis Otavio',
+    name: 'Eneida Monaco',
     role: 'documentação',
-    linkedin: 'https://www.linkedin.com/in/luis-otavio-81b3a1283/',
-    github: 'https://github.com/LuisOtavio26',
+    linkedin: 'https://www.linkedin.com/in/victor-hugo-batista-ribeiro-77993a26b/',
   },
+  {
+    name: 'Lucas F. Farias(Lider)',
+    role: 'Backend',
+    linkedin: 'https://www.linkedin.com/in/victor-hugo-batista-ribeiro-77993a26b/',
+  },
+  {
+    name: 'Victor H. Batista',
+    role: 'Backend',
+    linkedin: 'https://www.linkedin.com/in/victor-hugo-batista-ribeiro-77993a26b/',
+  },
+  {
+    name: 'Gabriel Morgado',
+    role: 'Backend',
+    linkedin: 'https://www.linkedin.com/in/victor-hugo-batista-ribeiro-77993a26b/',
+  },
+  {
+    name: 'Guilherme Messina',
+    role: 'Frontend',
+    linkedin: 'https://www.linkedin.com/in/victor-hugo-batista-ribeiro-77993a26b/',
+  },
+  {
+    name: 'João Pedro Tosta',
+    role: 'Backend',
+    linkedin: 'https://www.linkedin.com/in/victor-hugo-batista-ribeiro-77993a26b/',
+  },{
+    name: 'Luciano Fabricio',
+    role: 'documentação',
+    linkedin: 'https://www.linkedin.com/in/victor-hugo-batista-ribeiro-77993a26b/',
+  },{
+    name: 'Luccas Belleza',
+    role: 'Backend',
+    linkedin: 'https://www.linkedin.com/in/victor-hugo-batista-ribeiro-77993a26b/',
+  },
+  {
+    name: 'Matheus M. Ikeda',
+    role: 'Frontend',
+    linkedin: 'https://www.linkedin.com/in/victor-hugo-batista-ribeiro-77993a26b/',
+  },
+  
 ];
 
 const rolesOrder = ['Gerenciador do projeto', 'Backend', 'Frontend', 'documentação'];
@@ -50,9 +81,11 @@ const ParticipantCard = ({ name, linkedin, github }) => (
       <a href={linkedin} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:text-cyan-200 transition-colors">
         <Linkedin size={24} />
       </a>
-      <a href={github} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:text-cyan-200 transition-colors">
-        <Github size={24} />
-      </a>
+      {github && (
+        <a href={github} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:text-cyan-200 transition-colors">
+          <Github size={24} />
+        </a>
+      )}
     </div>
   </div>
 );
@@ -109,23 +142,14 @@ function AboutUsScreen() {
           className="p-6 border-2 border-cyan-400 bg-black/60"
           data-augmented-ui="tl-clip tr-clip br-clip bl-clip border"
         >
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="md:col-span-1 flex flex-col items-center justify-center">
-              <div 
-                className="w-full h-64 border-2 border-dashed border-cyan-500 bg-black/40 flex items-center justify-center"
-                data-augmented-ui="tl-clip tr-clip br-clip bl-clip border"
-              >
-                <p className="text-gray-400">Espaço para foto do grupo</p>
-              </div>
-            </div>
-            <div className="md:col-span-2">
-              <h2 className="text-3xl font-bold text-cyan-400 mb-4">Nossa Missão</h2>
-              <p className="text-gray-300 leading-relaxed text-lg">
-                Somos uma equipe de desenvolvedores e jogadores apaixonados, dedicados a criar experiências cyberpunk únicas e imersivas. Nosso objetivo é construir uma comunidade onde os jogadores possam se conectar, competir e se divertir em um mundo retro-futurista. O Cyber-Stop é nosso primeiro grande projeto, nascido do amor por jogos clássicos e do desejo de trazer algo novo para o mercado.
-              </p>
-            </div>
-          </div>
-        </div>
+                    <div className="flex flex-col items-center justify-center">
+                      <div
+                        className="w-full h-80 border-2 border-cyan-500 flex items-center justify-center mx-auto overflow-hidden"
+                        data-augmented-ui="tl-clip tr-clip br-clip bl-clip border"
+                      >
+                        <img src="/GRUPROTO.jpeg" alt="Foto do Grupo" className="w-full h-full object-cover" />
+                      </div>
+                    </div>        </div>
         
         {/* --- Team Section --- */}
         <div 
