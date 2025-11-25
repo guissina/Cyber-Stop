@@ -240,7 +240,7 @@ export default function ShopScreen() {
           Voltar
         </button>
 
-        <GlitchText text="Loja" fontSize={5} color="rgba(115, 255, 0, 1)" fontWeight="normal" textAlign="center" font="/src/assets/fonts/Dena.otf" />
+        <GlitchText text="Loja" fontSize={5} color="rgba(115, 255, 0, 1)" fontWeight="normal" textAlign="center" font="https://fonts.gstatic.com/s/orbitron/v35/yMJMMIlzdpvBhQQL_SC3X9yhF25-T1ny_Cmxpg.ttf" />
         {/* <h1 className="text-3xl md:text-4xl font-bold text-center text-accent z-10">
           LOJA
         </h1> */}
