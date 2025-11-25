@@ -7,6 +7,7 @@ import PlayerCard from '../components/PlayerCard';
 import { useExitConfirmation } from '../hooks/useExitConfirmation';
 import ExitConfirmationModal from '../components/ExitConfirmationModal';
 import NavigationBlocker from '../components/NavigationBlocker';
+import PixelBlast from '../components/PixelBlast';
 
 function WaitingRoomScreen() {
     const { salaId } = useParams(); 
@@ -146,103 +147,110 @@ function WaitingRoomScreen() {
     const is_creator = sala?.jogador_criador_id === meuJogadorId;
 
     return ( 
-        <div 
+        <div
             className="relative flex flex-col items-center justify-center min-h-screen text-white p-4 font-cyber bg-cover bg-center"
             style={{ backgroundImage: "url('/backgrounds/cyber-city.jpg')" }}
         >
-            <div className="absolute inset-0 bg-black/50"></div>
-            <NavigationBlocker 
-                shouldBlock={isInRoomOrMatch}
-                exitConfirmed={exitConfirmed}
-                exitCancelled={exitCancelled}
-                showModal={showModal}
-                onBlock={(proceed, reset) => handleExitClick(proceed, reset)}
-            />
-            <ExitConfirmationModal 
-                isOpen={showModal}
-                onConfirm={confirmExit}
-                onCancel={cancelExit}
-            />
-            
-            <div className="w-full flex justify-between items-start p-4 absolute top-0 left-0 z-20">
-                <button
-                    onClick={handleLeaveRoom} 
-                    disabled={leaving} 
-                    className="text-text-muted hover:text-primary transition-colors cursor-target flex items-center gap-2 text-md disabled:opacity-50" 
-                    title="Sair da sala" 
-                >
-                    {leaving ? <Loader2 size={20} className="animate-spin" /> : <ArrowLeft size={20} />} 
-                    {leaving ? 'Saindo...' : 'Sair'} 
-                </button>
-                <div className="text-right">
-                    <h1 className="text-2xl font-bold text-accent">{sala.nome_sala}</h1>
-                    <div className="flex items-center justify-end gap-2 mt-1"> 
-                        <span className="text-text-muted text-sm">ID:</span> 
-                        <span className="text-lg font-mono text-warning">{salaId}</span>
-                        <button onClick={copyToClipboard} title="Copiar ID" className="text-text-muted hover:text-warning transition-colors cursor-target p-1"> 
-                            <ClipboardCopy size={18}/> 
-                        </button>
-                    </div>
-                    {copySuccess && <p className="text-xs text-accent h-4 mt-1">{copySuccess}</p>} 
-                </div>
-            </div>
-
-            <div className="w-full flex flex-col md:flex-row items-center justify-center md:justify-around gap-8 md:gap-0 flex-grow pt-24 md:pt-0 z-10">
-                <PlayerCard 
-                    playerName={jogador1?.nome_de_usuario}
-                    isHost={jogador1?.is_creator}
-                    avatarNome={jogador1?.avatar_nome}
-                    personagemNome={jogador1?.personagem_nome}
-                    ranking={jogador1?.ranking}
+            <PixelBlast className='absolute inset-0 pointer-events-none' style={{ zIndex: -1 }}/>
+            <div className='absolute w-full h-full z-0 p-20'>
+                <div className="absolute inset-0 bg-black/50 z-0 pointer-events-none"></div>
+                <NavigationBlocker 
+                    shouldBlock={isInRoomOrMatch}
+                    exitConfirmed={exitConfirmed}
+                    exitCancelled={exitCancelled}
+                    showModal={showModal}
+                    onBlock={(proceed, reset) => handleExitClick(proceed, reset)}
+                    
+                />
+                <ExitConfirmationModal 
+                    isOpen={showModal}
+                    onConfirm={confirmExit}
+                    onCancel={cancelExit}
                 />
                 
-                <div className="text-8xl lg:text-9xl font-black text-white font-['Dena'] my-4 md:my-0 animate-pulse" style={{ textShadow: '0 0 10px #ff00ff, 0 0 20px #ff00ff' }}>
-                    DUEL
-                </div>
-
-                <PlayerCard 
-                    playerName={jogador2?.nome_de_usuario}
-                    isHost={jogador2?.is_creator}
-                    avatarNome={jogador2?.avatar_nome}
-                    personagemNome={jogador2?.personagem_nome}
-                    ranking={jogador2?.ranking}
-                    isPlayer2
-                />
-            </div>
-
-            <div className="w-full flex flex-col items-center justify-center p-4 pb-8 absolute bottom-0 left-0 z-20">
-                {error && <p className="text-red-400 mb-4 text-center">{error}</p>} 
-                
-                {sala.status === 'waiting' && ( 
-                    <div className="text-center">
-                        {is_creator ? ( 
-                            <button
-                                onClick={handleStartGame} 
-                                disabled={loading || sala.jogadores?.length < 2} 
-                                className="px-12 py-4 bg-accent text-black rounded-md font-bold text-2xl 
-                                           hover:bg-accent/80 disabled:bg-gray-600 disabled:text-gray-400 disabled:cursor-not-allowed 
-                                           transition-all cursor-target shadow-lg shadow-accent/30
-                                           hover:scale-105 active:scale-100"
-                                title={sala.jogadores?.length < 2 ? "Aguardando oponente..." : "Iniciar Batalha"} 
-                            >
-                                {loading && !leaving ? <Loader2 className="animate-spin mx-auto" /> : 'INICIAR'} 
+                <div className="w-full flex justify-between items-start p-4 absolute top-0 left-0 z-20">
+                    <button
+                        onClick={handleLeaveRoom} 
+                        disabled={leaving} 
+                        className="text-text-muted hover:text-primary transition-colors cursor-target flex items-center gap-2 text-md disabled:opacity-50" 
+                        title="Sair da sala" 
+                    >
+                        {leaving ? <Loader2 size={20} className="animate-spin" /> : <ArrowLeft size={20} />} 
+                        {leaving ? 'Saindo...' : 'Sair'} 
+                    </button>
+                    <div className="text-right">
+                        <h1 className="text-2xl font-bold text-accent">{sala.nome_sala}</h1>
+                        <div className="flex items-center justify-end gap-2 mt-1"> 
+                            <span className="text-text-muted text-sm">ID:</span> 
+                            <span className="text-lg font-mono text-warning">{salaId}</span>
+                            <button onClick={copyToClipboard} title="Copiar ID" className="text-text-muted hover:text-warning transition-colors cursor-target p-1"> 
+                                <ClipboardCopy size={18}/> 
                             </button>
-                        ) : ( 
-                            <p className="text-lg text-text-muted flex items-center justify-center gap-3"> 
-                               <Loader2 className="animate-spin h-6 w-6"/> Aguardando Host iniciar...
-                            </p>
-                        )}
-                        {sala.jogadores?.length < 2 && ( 
-                           <p className="text-sm text-warning/80 mt-3">Aguardando oponente se conectar...</p> 
-                        )}
+                        </div>
+                        {copySuccess && <p className="text-xs text-accent h-4 mt-1">{copySuccess}</p>} 
                     </div>
-                )}
-                 {(sala.status === 'abandonada' || sala.status === 'terminada') && !loading && (
-                    <p className={`text-lg font-semibold ${sala.status === 'abandonada' ? 'text-primary' : 'text-secondary'}`}>
-                       Esta Batalha foi {sala.status}.
-                    </p>
-                  )}
+                </div>
+
+                <div className="w-full flex flex-col md:flex-row items-center justify-center md:justify-around gap-8 md:gap-0 flex-grow pt-24 md:pt-0 z-10">
+                    <PlayerCard 
+                        playerName={jogador1?.nome_de_usuario}
+                        isHost={jogador1?.is_creator}
+                        avatarNome={jogador1?.avatar_nome}
+                        personagemNome={jogador1?.personagem_nome}
+                        ranking={jogador1?.ranking}
+                    />
+                    
+                    <div className="text-8xl lg:text-9xl font-black text-white font-['Dena'] my-4 md:my-0 animate-pulse" style={{ textShadow: '0 0 10px #ff00ff, 0 0 20px #ff00ff' }}>
+                        DUEL
+                    </div>
+
+                    <PlayerCard 
+                        playerName={jogador2?.nome_de_usuario}
+                        isHost={jogador2?.is_creator}
+                        avatarNome={jogador2?.avatar_nome}
+                        personagemNome={jogador2?.personagem_nome}
+                        ranking={jogador2?.ranking}
+                        isPlayer2
+                    />
+                </div>
+
+                <div className="w-full flex flex-col items-center justify-center p-4 pb-8 absolute bottom-0 left-0 z-20">
+                    {error && <p className="text-red-400 mb-4 text-center">{error}</p>} 
+                    
+                    {sala.status === 'waiting' && ( 
+                        <div className="text-center">
+                            {is_creator ? ( 
+                                <button
+                                    onClick={handleStartGame} 
+                                    disabled={loading || sala.jogadores?.length < 2} 
+                                    className="px-12 py-4 bg-accent text-black rounded-md font-bold text-2xl 
+                                            hover:bg-accent/80 disabled:bg-gray-600 disabled:text-gray-400 disabled:cursor-not-allowed 
+                                            transition-all cursor-target shadow-lg shadow-accent/30
+                                            hover:scale-105 active:scale-100"
+                                    title={sala.jogadores?.length < 2 ? "Aguardando oponente..." : "Iniciar Batalha"} 
+                                >
+                                    {loading && !leaving ? <Loader2 className="animate-spin mx-auto" /> : 'INICIAR'} 
+                                </button>
+                            ) : ( 
+                                <p className="text-lg text-text-muted flex items-center justify-center gap-3"> 
+                                <Loader2 className="animate-spin h-6 w-6"/> Aguardando Host iniciar...
+                                </p>
+                            )}
+                            {sala.jogadores?.length < 2 && ( 
+                            <p className="text-sm text-warning/80 mt-3">Aguardando oponente se conectar...</p> 
+                            )}
+                        </div>
+                    )}
+                    {(sala.status === 'abandonada' || sala.status === 'terminada') && !loading && (
+                        <p className={`text-lg font-semibold ${sala.status === 'abandonada' ? 'text-primary' : 'text-secondary'}`}>
+                        Esta Batalha foi {sala.status}.
+                        </p>
+                    )}
+                </div>
+
             </div>
+            
+            
         </div>
     );
 }
